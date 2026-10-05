@@ -98,19 +98,15 @@ private val Band = Brush.radialGradient(
     center = Offset(0f, 0f), radius = 1400f,
 )
 
-private val PIPELINE = listOf("new", "contacted", "visit_scheduled", "quoted", "won", "done")
-private val SIDE = listOf("on_hold", "lost")
-private val CLOSED = setOf("done", "lost")
+/** Where a lead stands — dates optional. "removed" takes it off the board (it can come back). */
+private val STATES = listOf("none", "meeting", "work")
+private val CLOSED = setOf("removed")
 
 private data class Tone(val dot: Color, val bg: Color, val fg: Color)
 private fun tone(s: String): Tone = when (s) {
-    "new" -> Tone(Amber, AmberSoft, Color(0xFF8A4A0B))
-    "contacted" -> Tone(Harbour2, Color(0xFFE3F1FA), Harbour)
-    "visit_scheduled" -> Tone(Color(0xFF6C5CE7), Color(0xFFECEBFD), Color(0xFF3F33A8))
-    "quoted" -> Tone(Color(0xFFB0489A), Color(0xFFF8E8F4), Color(0xFF7D2A6B))
-    "won" -> Tone(Israel, Color(0xFFDEF5EC), Color(0xFF0B5C47))
-    "done" -> Tone(Color(0xFF8A9AAB), Color(0xFFECEFF3), Ink2)
-    "on_hold" -> Tone(Color(0xFFB9C4CF), Color(0xFFEEF1F4), Muted)
+    "none" -> Tone(Amber, AmberSoft, Color(0xFF8A4A0B))
+    "meeting" -> Tone(MeetGreen, MeetSoft, MeetInk)
+    "work" -> Tone(WorkRed, WorkSoft, WorkInk)
     else -> Tone(Color(0xFFD4DBE2), Color(0xFFF3F5F7), Color(0xFF8A9AAB))
 }
 private fun partnerColor(src: String) = if (src == "israel") Israel else Basis
@@ -132,9 +128,6 @@ private fun short(iso: String?): String {
     return if (t.date == today) "${two(t.hour)}:${two(t.minute)}"
     else "${t.dayOfMonth}.${t.monthNumber} ${two(t.hour)}:${two(t.minute)}"
 }
-
-/** Work (red) outranks a meeting (green); "none" is usually a lead nobody has talked to yet. */
-private fun datedOf(l: Lead) = if (l.workStart != null) "work" else if (l.meetingAt != null) "meeting" else "none"
 
 private fun prettyPhone(p: String) = if (p.length == 10) "${p.take(3)}-${p.drop(3)}" else p
 private fun intlPhone(p: String) = if (p.startsWith("0")) "972" + p.drop(1) else p
@@ -219,7 +212,6 @@ private fun BoardScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var view by remember { mutableStateOf("open") }
     var source by remember { mutableStateOf("all") }
-    var dated by remember { mutableStateOf("any") }
     var mode by remember { mutableStateOf("leads") }
     var openId by remember { mutableStateOf<Int?>(null) }
     var reply by remember { mutableStateOf<CommandReply?>(null) }
@@ -249,7 +241,7 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, mode, dated, onView = { view = it }, onSource = { source = it }, onDated = { dated = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
+            LeadList(d, error, view, source, mode, onView = { view = it }, onSource = { source = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
             AnimatedVisibility(
                 reply != null, Modifier.align(Alignment.BottomCenter),
                 enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut(),
@@ -278,13 +270,13 @@ private fun BoardScreen() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LeadList(
-    d: BoardData, error: String?, view: String, source: String, mode: String, dated: String,
-    onView: (String) -> Unit, onSource: (String) -> Unit, onDated: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
+    d: BoardData, error: String?, view: String, source: String, mode: String,
+    onView: (String) -> Unit, onSource: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
     val inSource = d.leads.filter { source == "all" || it.source == source }
-    val leads = inSource.filter { dated == "any" || datedOf(it) == dated }.filter { when (view) { "all" -> true; "open" -> it.status !in CLOSED; else -> it.status == view } }
-    val fresh = if (view == "open") leads.filter { it.status == "new" }.sortedBy { it.lastMessageAt ?: it.createdAt } else emptyList()
-    val rest = if (view == "open") leads.filter { it.status != "new" } else leads
+    val leads = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
+    val fresh = if (view == "open") leads.filter { it.status == "none" }.sortedBy { it.lastMessageAt ?: it.createdAt } else emptyList()
+    val rest = if (view == "open") leads.filter { it.status != "none" } else leads
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
 
@@ -331,32 +323,17 @@ private fun LeadList(
                     )
                 }
             }
-            // Has a date been set: meeting (green) / work (red) / neither
-            if (mode == "leads") Row(
-                Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
-            ) {
-                listOf(Triple("any", "כל המועדים", null), Triple("meeting", "פגישה", MeetGreen), Triple("work", "עבודה", WorkRed), Triple("none", "בלי מועד", Color.White.copy(alpha = .5f))).forEach { (id, label, dot) ->
-                    val sel = id == dated
-                    Row(
-                        Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
-                            .clickable { onDated(id) }.padding(horizontal = 12.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (dot != null) { Box(Modifier.size(7.dp).clip(CircleShape).background(if (sel && id == "none") Muted else dot)); Spacer(Modifier.width(5.dp)) }
-                        T(label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f))
-                    }
-                }
-            }
-            // Pipeline strip
+            // Where the leads stand
             if (mode == "leads") LazyRow(
                 Modifier.padding(top = 14.dp),
                 contentPadding = PaddingValues(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                item { Stage("פתוחים", openCount, view == "open", null) { onView("open") } }
+                item { Stage("הכל", openCount, view == "open", null) { onView("open") } }
                 item { Spacer(Modifier.width(4.dp)) }
-                items(PIPELINE + SIDE) { s -> Stage(label(s), inSource.count { it.status == s }, view == s, tone(s).dot) { onView(s) } }
-                item { Stage("הכל", inSource.size, view == "all", null) { onView("all") } }
+                items(STATES) { s -> Stage(label(s), inSource.count { it.status == s }, view == s, tone(s).dot) { onView(s) } }
+                item { Spacer(Modifier.width(4.dp)) }
+                item { Stage("הוסרו", inSource.count { it.status == "removed" }, view == "removed", tone("removed").dot) { onView("removed") } }
             }
         }
     }
@@ -428,13 +405,13 @@ private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onE
             Row(Modifier.weight(1f).padding(14.dp)) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (l.status != "new") { Pill(l.statusLabel, t.bg, t.fg, strike = l.status == "lost"); Spacer(Modifier.width(8.dp)) }
                         PartnerBadge(l.source, d.sources.firstOrNull { it.id == l.source }?.label)
                         Spacer(Modifier.weight(1f))
-                        when {
-                            l.workStart != null -> Pill("עבודה ${sayDay(l.workStart)}" + (l.workEnd?.takeIf { it != l.workStart }?.let { " – ${sayDay(it)}" } ?: ""), WorkSoft, WorkInk)
-                            l.meetingAt != null -> Pill("פגישה ${sayDay(l.meetingAt)} ${l.meetingAt.drop(11).take(5)}", MeetSoft, MeetInk)
-                            else -> T(short(l.lastMessageAt ?: l.createdAt), 12, color = Muted)
+                        when (l.status) {
+                            "work" -> Pill("עבודה" + (l.workStart?.let { s0 -> " ${sayDay(s0)}" + (l.workEnd?.takeIf { it != s0 }?.let { " – ${sayDay(it)}" } ?: "") } ?: ""), t.bg, t.fg)
+                            "meeting" -> Pill("פגישה" + (l.meetingAt?.let { " ${sayDay(it)} ${it.drop(11).take(5)}" } ?: ""), t.bg, t.fg)
+                            "none" -> T(short(l.lastMessageAt ?: l.createdAt), 12, color = Muted)
+                            else -> Pill(l.statusLabel, t.bg, t.fg)
                         }
                     }
                     T(l.title, 17, FontWeight.Bold, modifier = Modifier.padding(top = 8.dp), maxLines = 2, lineHeight = 22)
@@ -509,7 +486,6 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     val place = listOfNotNull(l.address, l.city).joinToString(", ")
     val photos = l.messages.filter { it.mediaType == "image" && it.mediaUrl != null }.map { it.mediaUrl!! }
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
-    val step = PIPELINE.indexOf(l.status)
 
     fun change(status: String?) {
         if (busy) return
@@ -584,45 +560,38 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                 }
             }
             item {
+                // Where the lead stands — a meeting or work can be set with or without a date.
                 Surface(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, Line)) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            PIPELINE.forEachIndexed { i, s ->
-                                val current = s == l.status
-                                val reached = step >= 0 && i <= step
-                                Column(Modifier.weight(1f).clickable(enabled = !busy && !current) { change(s) }, horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(Modifier.height(32.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                            Box(Modifier.weight(1f).height(2.dp).background(if (i == 0) Color.Transparent else if (step >= i) Harbour else Track))
-                                            val size = if (current) 30.dp else 22.dp
-                                            Box(
-                                                Modifier.size(size).clip(CircleShape)
-                                                    .background(if (current) tone(s).dot else if (reached) Harbour else Paper)
-                                                    .border(if (!reached && !current) 2.dp else 0.dp, Track, CircleShape),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                if (current) Box(Modifier.size(8.dp).clip(CircleShape).background(Color.White))
-                                                else if (reached) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                            }
-                                            Box(Modifier.weight(1f).height(2.dp).background(if (i == PIPELINE.size - 1) Color.Transparent else if (step > i) Harbour else Track))
-                                        }
+                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (l.status == "removed") {
+                            T("הליד הוסר מהלוח", 14, color = Muted, modifier = Modifier.weight(1f).padding(horizontal = 6.dp))
+                            T(
+                                "החזר ללוח", 14, FontWeight.SemiBold, Color.White,
+                                Modifier.clip(CircleShape).background(Harbour).clickable(enabled = !busy) { change("none") }
+                                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                            )
+                        } else {
+                            Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Paper).padding(4.dp)) {
+                                STATES.forEach { s ->
+                                    val sel = s == l.status
+                                    val t = tone(s)
+                                    Row(
+                                        Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (sel) t.bg else Color.Transparent)
+                                            .clickable(enabled = !busy && !sel) { change(s) }.padding(vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Box(Modifier.size(8.dp).clip(CircleShape).background(t.dot))
+                                        Spacer(Modifier.width(6.dp))
+                                        T(label(s), 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) t.fg else Muted)
                                     }
-                                    T(label(s), 11, if (current) FontWeight.Bold else FontWeight.Normal, if (current) Ink else Muted, Modifier.padding(top = 6.dp), maxLines = 1)
                                 }
                             }
-                        }
-                        HorizontalDivider(color = Line, modifier = Modifier.padding(top = 14.dp, bottom = 12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SIDE.forEach { s ->
-                                val sel = s == l.status
-                                val t = tone(s)
-                                T(
-                                    label(s), 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) t.fg else Muted,
-                                    Modifier.clip(CircleShape).background(if (sel) t.bg else Color.Transparent)
-                                        .border(1.dp, if (sel) t.fg else Line, CircleShape)
-                                        .clickable(enabled = !busy && !sel) { change(s) }.padding(horizontal = 14.dp, vertical = 6.dp),
-                                )
-                            }
+                            Spacer(Modifier.width(8.dp))
+                            T(
+                                "הסר", 14, color = Muted,
+                                modifier = Modifier.clip(CircleShape).border(1.dp, Line, CircleShape).clickable(enabled = !busy) { change("removed") }
+                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                            )
                         }
                     }
                 }
@@ -1074,7 +1043,7 @@ private sealed class CalEntry(val lead: Lead) {
 private fun entriesByDay(leads: List<Lead>): Map<kotlinx.datetime.LocalDate, List<CalEntry>> {
     val map = mutableMapOf<kotlinx.datetime.LocalDate, MutableList<CalEntry>>()
     for (l in leads) {
-        if (l.status == "lost") continue
+        if (l.status == "removed") continue
         l.meetingAt?.let { m -> day(m)?.let { map.getOrPut(it) { mutableListOf() }.add(CalEntry.Meeting(l, m.drop(11).take(5))) } }
         val s = l.workStart?.let(::day) ?: continue
         val e = l.workEnd?.let(::day)?.takeIf { it >= s } ?: s
