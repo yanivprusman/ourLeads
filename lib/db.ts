@@ -121,6 +121,10 @@ export function getDb(): DatabaseSync {
     ["sub_phone", "TEXT"],
     ["sub_price", "REAL"],
     ["sub_vat", "INTEGER"],
+    // The calendar. Local Israel time, no zone: "2026-10-09T10:00" / "2026-10-12".
+    ["meeting_at", "TEXT"],
+    ["work_start", "TEXT"],
+    ["work_end", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
   return db;
@@ -150,6 +154,11 @@ export interface LeadRow {
   sub_phone: string | null;
   sub_price: number | null;
   sub_vat: number | null;
+  /** A meeting with a customer we have no contract with yet ("2026-10-09T10:00"). */
+  meeting_at: string | null;
+  /** The job itself, once there is a contract ("2026-10-12"). */
+  work_start: string | null;
+  work_end: string | null;
   created_at: string;
   updated_at: string;
   last_message_at: string | null;
@@ -229,6 +238,9 @@ export interface LeadPatch {
   sub_phone?: string | null;
   sub_price?: number | null;
   sub_vat?: number | null;
+  meeting_at?: string | null;
+  work_start?: string | null;
+  work_end?: string | null;
 }
 
 const PATCHABLE: (keyof LeadPatch)[] = [
@@ -247,6 +259,9 @@ const PATCHABLE: (keyof LeadPatch)[] = [
   "sub_phone",
   "sub_price",
   "sub_vat",
+  "meeting_at",
+  "work_start",
+  "work_end",
 ];
 
 /** Apply field changes and a status change, logging each as an event. */
@@ -260,6 +275,14 @@ export function updateLead(
   const d = getDb();
   const lead = getLead(id);
   if (!lead) throw new Error(`no lead #${id}`);
+  // A date on the calendar says where the lead is: a meeting means a visit is set;
+  // working dates mean there is a contract. Only ever moves a lead forward.
+  if (!status) {
+    const order = ["new", "contacted", "visit_scheduled", "quoted", "won", "done"];
+    const at = order.indexOf(lead.status);
+    if (patch.work_start && at >= 0 && at < order.indexOf("won")) status = "won";
+    else if (patch.meeting_at && at >= 0 && at < order.indexOf("visit_scheduled")) status = "visit_scheduled";
+  }
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
   for (const key of PATCHABLE) {

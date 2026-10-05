@@ -34,6 +34,9 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
     statusLabel: STATUS_LABELS[l.status],
     nextStep: l.next_step,
     visitAt: l.visit_at,
+    meetingAt: l.meeting_at,
+    workStart: l.work_start,
+    workEnd: l.work_end,
     deal: {
       clientPrice: l.client_price,
       clientVat: l.client_vat === null ? null : !!l.client_vat,

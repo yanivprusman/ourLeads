@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import LeadDetail from "./LeadDetail";
 import VoiceDock, { type CommandReply } from "./VoiceDock";
 import Mark from "./Mark";
+import Calendar, { sayDay } from "./Calendar";
 import {
   CLOSED,
   PARTNER_TONE,
@@ -25,6 +26,7 @@ export default function Board() {
   const [data, setData] = useState<BoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("open");
+  const [mode, setMode] = useState<"leads" | "calendar">("leads");
   const [source, setSource] = useState<string>("all");
   const [openId, setOpenId] = useState<number | null>(null);
   const [reply, setReply] = useState<CommandReply | null>(null);
@@ -101,7 +103,29 @@ export default function Board() {
             )}
           </div>
 
-          <div className="mt-4 inline-flex rounded-full bg-white/10 p-1 text-sm">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
+            {(
+              [
+                ["leads", "לידים"],
+                ["calendar", "יומן"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                data-id={`mode-${id}`}
+                {...(mode === id ? { "data-active-tab": label } : {})}
+                onClick={() => setMode(id)}
+                className={`rounded-full px-4 py-1.5 transition cursor-pointer flex items-center gap-1.5 ${
+                  mode === id ? "bg-amber text-white font-bold shadow" : "text-white/80 hover:text-white"
+                }`}
+              >
+                {id === "calendar" && <CalGlyph />}
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
             {[{ id: "all", label: "כולם" }, ...data.sources].map((s) => (
               <button
                 key={s.id}
@@ -115,10 +139,11 @@ export default function Board() {
               </button>
             ))}
           </div>
+          </div>
         </div>
 
         {/* The pipeline: every stage a lead can be in, with how many are there now. */}
-        <nav className="max-w-3xl mx-auto px-4 pb-4 overflow-x-auto no-scrollbar">
+        <nav className={`max-w-3xl mx-auto px-4 pb-4 overflow-x-auto no-scrollbar ${mode === "calendar" ? "hidden" : ""}`}>
           <div className="flex items-stretch gap-1 min-w-max">
             <Stage
               id="open"
@@ -144,6 +169,10 @@ export default function Board() {
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-3">
         {error && <p className="text-red-700 text-sm">{error}</p>}
 
+        {mode === "calendar" ? (
+          <Calendar data={{ ...data, leads: inSource }} onOpen={(id) => setOpenId(id)} />
+        ) : (
+          <>
         {fresh.length > 0 && (
           <>
             <SectionHead title="מחכים לשיחה ראשונה" hint="כמה זמן כל ליד מחכה — ליד חם שווה יותר" />
@@ -164,6 +193,8 @@ export default function Board() {
         )}
 
         {data.unassigned.length > 0 && (view === "open" || view === "all") && <Unassigned data={data} onChanged={load} />}
+          </>
+        )}
       </div>
 
       {open && <LeadDetail lead={open} data={data} now={now} onClose={() => setOpenId(null)} onChanged={load} />}
@@ -269,8 +300,23 @@ function LeadCard({ lead: l, data, now, onOpen }: { lead: Lead; data: BoardData;
           </div>
           <h3 className="font-bold text-[17px] leading-snug mt-2">{l.title}</h3>
           <p className="text-sm text-muted mt-0.5 truncate">
-            {[l.customerName, l.city, l.visitAt && `ביקור ${l.visitAt}`].filter(Boolean).join(" · ") || l.trade}
+            {[l.customerName, l.city].filter(Boolean).join(" · ") || l.trade}
           </p>
+          {(l.meetingAt || l.workStart) && (
+            <p className="mt-1.5 flex flex-wrap gap-1.5 text-[12.5px] font-semibold">
+              {l.meetingAt && (
+                <span className="rounded-md bg-[#dcfce7] text-[#166534] px-2 py-0.5">
+                  פגישה {sayDay(l.meetingAt.slice(0, 10))} {l.meetingAt.slice(11, 16)}
+                </span>
+              )}
+              {l.workStart && (
+                <span className="rounded-md bg-[#fee2e2] text-[#991b1b] px-2 py-0.5">
+                  עבודה {sayDay(l.workStart)}
+                  {l.workEnd && l.workEnd !== l.workStart ? ` – ${sayDay(l.workEnd)}` : ""}
+                </span>
+              )}
+            </p>
+          )}
           {l.nextStep && <p className="text-sm text-ink-2 mt-1.5 line-clamp-1">← {l.nextStep}</p>}
           <DealLine lead={l} />
         </div>
@@ -326,6 +372,15 @@ function DealLine({ lead }: { lead: Lead }) {
         </span>
       )}
     </p>
+  );
+}
+
+function CalGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" strokeLinecap="round" />
+    </svg>
   );
 }
 

@@ -3,7 +3,7 @@ import { askJson } from "./claude";
 import { SOURCES } from "./config";
 import { STATUS_GUIDE, describeLeads } from "./ingest";
 import { STATUS_LABELS, addEvent, getDb, getLead, isStatus, now, updateLead } from "./db";
-import { DEAL_KEYS, describeDeal } from "./deal";
+import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal, todayLine } from "./deal";
 
 /**
  * "Talk to it and say the status."
@@ -44,6 +44,9 @@ interface Answer {
     subPhone?: string | null;
     subPrice?: number | null;
     subVat?: boolean | null;
+    meetingAt?: string | null;
+    workStart?: string | null;
+    workEnd?: string | null;
   }[];
   create?: {
     source: string;
@@ -81,6 +84,9 @@ const COMMAND_SCHEMA = {
           subPhone: s,
           subPrice: { type: ["number", "null"] },
           subVat: { type: ["boolean", "null"] },
+          meetingAt: s,
+          workStart: s,
+          workEnd: s,
         },
         required: ["leadId"],
       },
@@ -127,6 +133,10 @@ ${describeLeads()}
 "סגרנו עם יונתן 050-1234567 על 5000 פלוס מע"מ" כשיונתן הוא מי שמבצע → subName "יונתן", subPhone "0501234567", subPrice 5000, subVat true.
 אם לא ברור אם האדם הוא הלקוח או קבלן המשנה — שאל ב-reply ואל תנחש.
 סגירה עם הלקוח → status won.
+יומן (${todayLine()}):
+- meetingAt: פגישה/ביקור אצל לקוח שעוד אין איתו חוזה, "YYYY-MM-DDTHH:MM" שעון ישראל. "חמישי בעשר" = יום חמישי הקרוב 10:00.
+- workStart/workEnd: ימי ביצוע העבודה כשיש חוזה, "YYYY-MM-DD". יום אחד → workEnd = workStart.
+- visitAt הישן אינו בשימוש; כל מועד הולך לשדות האלה.
 אם נאמר ליד חדש שלא קיים בלוח — הוסף אותו ב-create.
 note: משפט קצר בגוף שלישי שמתעד מה נאמר, כולל מחירים ותאריכים.
 אם לא ברור לאיזה ליד הכוונה — אל תשנה כלום, ושאל ב-reply שאלה קצרה.
@@ -165,9 +175,17 @@ export async function runCommand(said: string, who: string): Promise<CommandResu
     if (c.subPhone) patch.sub_phone = c.subPhone.replace(/\D/g, "").replace(/^972/, "0");
     if (c.subPrice != null) patch.sub_price = c.subPrice;
     if (c.subVat != null) patch.sub_vat = c.subVat ? 1 : 0;
+    const meet = cleanDateTime(c.meetingAt);
+    if (meet) patch.meeting_at = meet;
+    const ws = cleanDate(c.workStart);
+    if (ws) {
+      patch.work_start = ws;
+      patch.work_end = cleanDate(c.workEnd) ?? ws;
+    }
     const status = isStatus(c.status) ? c.status : null;
     const after = updateLead(c.leadId, who, patch, status, c.note ?? text);
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "deal", describeDeal(after));
+    if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "calendar", describeCalendar(after));
     applied.push({
       leadId: after.id,
       title: after.title,

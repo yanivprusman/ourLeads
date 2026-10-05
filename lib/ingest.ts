@@ -3,7 +3,7 @@ import path from "node:path";
 import { messagesSince, downloadMedia } from "./bridge";
 import { SOURCES, Source, dataDir, ingestSince } from "./config";
 import { askJson } from "./claude";
-import { describeDeal } from "./deal";
+import { cleanDate, cleanDateTime, describeCalendar, describeDeal, sayWhen, todayLine } from "./deal";
 import { transcribe } from "./transcribe";
 import {
   STATUSES,
@@ -179,7 +179,8 @@ export function describeLeads(): string {
         (l.customer_name ? ` | לקוח: ${l.customer_name}` : "") +
         (phones ? ` | טל: ${phones}` : "") +
         (l.address || l.city ? ` | ${[l.address, l.city].filter(Boolean).join(", ")}` : "") +
-        (l.visit_at ? ` | ביקור: ${l.visit_at}` : "") +
+        (l.meeting_at ? ` | פגישה: ${sayWhen(l.meeting_at)}` : l.visit_at ? ` | ביקור: ${l.visit_at}` : "") +
+        (l.work_start ? ` | עבודה: ${sayWhen(l.work_start)}${l.work_end && l.work_end !== l.work_start ? `–${sayWhen(l.work_end)}` : ""}` : "") +
         (l.next_step ? ` | הבא: ${l.next_step}` : "") +
         (l.client_price != null || l.sub_price != null || l.sub_name ? ` | ${describeDeal(l)}` : "");
     })
@@ -204,6 +205,9 @@ interface LeadFields {
   subPhone?: string | null;
   subPrice?: number | null;
   subVat?: boolean | null;
+  meetingAt?: string | null;
+  workStart?: string | null;
+  workEnd?: string | null;
 }
 
 interface ExtractAnswer {
@@ -229,6 +233,13 @@ function toPatch(f: LeadFields): LeadPatch {
   if (f.subPhone) p.sub_phone = f.subPhone.replace(/\D/g, "").replace(/^972/, "0");
   if (f.subPrice != null) p.sub_price = f.subPrice;
   if (f.subVat != null) p.sub_vat = f.subVat ? 1 : 0;
+  const meet = cleanDateTime(f.meetingAt);
+  if (meet) p.meeting_at = meet;
+  const ws = cleanDate(f.workStart);
+  if (ws) {
+    p.work_start = ws;
+    p.work_end = cleanDate(f.workEnd) ?? ws;
+  }
   return p;
 }
 
@@ -263,7 +274,9 @@ function buildPrompt(src: Source, msgs: MessageRow[]): string {
 - address, city: כתובת ועיר אם נאמרו.
 - details: סיכום של כל מה שידוע על העבודה — מה צריך, מצב, מחיר שדובר, דחיפות — כולל מה שנאמר בהקלטות. 1–4 משפטים.
 - nextStep: מה הצעד הבא ומי עושה אותו, אם ברור.
-- visitAt: מועד ביקור אם נקבע, בטקסט חופשי ("חמישי 09.10").
+- יומן (${todayLine()}): meetingAt = פגישה/ביקור שנקבע אצל לקוח שעוד אין איתו חוזה, "YYYY-MM-DDTHH:MM";
+  workStart/workEnd = ימי ביצוע אחרי שנסגר חוזה, "YYYY-MM-DD". "אגיע אליו בחמישי" בלי שעה → meetingAt עם 09:00
+  וכתוב ב-note שהשעה לא נקבעה. אל תשתמש ב-visitAt.
 - עסקה, רק אם נאמר סכום שסוכם: clientPrice/clientVat = מה הלקוח משלם; subName/subPhone/subPrice/subVat =
   קבלן המשנה שמבצע את העבודה ומה הוא מקבל. clientVat/subVat: true אם "פלוס מע"מ", false אם "כולל מע"מ".
   הצעת מחיר שעוד לא נסגרה היא לא עסקה — כתוב אותה ב-details.
@@ -301,6 +314,9 @@ const LEAD_FIELDS = {
   subPhone: str,
   subPrice: { type: ["number", "null"] },
   subVat: { type: ["boolean", "null"] },
+  meetingAt: str,
+  workStart: str,
+  workEnd: str,
   status: str,
   note: str,
   messageIds: { type: "array", items: { type: "string" } },
@@ -364,6 +380,11 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
         const lead = updateLead(leadId, src.partner.split(" ")[0], deal, null, null);
         addEvent(leadId, src.partner.split(" ")[0], "deal", describeDeal(lead), null, null, firstAt);
       }
+      const cal = toPatch({ meetingAt: c.meetingAt, workStart: c.workStart, workEnd: c.workEnd });
+      if (Object.keys(cal).length) {
+        const lead = updateLead(leadId, src.partner.split(" ")[0], cal, null, null);
+        addEvent(leadId, src.partner.split(" ")[0], "calendar", describeCalendar(lead), null, null, firstAt);
+      }
       for (const i of ids) {
         setMsg.run(leadId, "done", i, byId.get(i)!.chat_jid);
         touched.add(i);
@@ -380,6 +401,9 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
         isStatus(a.status) ? a.status : null,
         a.note ?? "הודעות חדשות בוואטסאפ",
       );
+      if (cleanDateTime(a.meetingAt) || cleanDate(a.workStart)) {
+        addEvent(a.leadId, fromMe ? OWNER : src.partner.split(" ")[0], "calendar", describeCalendar(getLead(a.leadId)!));
+      }
       if (a.clientPrice != null || a.subPrice != null || a.subName) {
         const lead = getLead(a.leadId)!;
         addEvent(a.leadId, fromMe ? OWNER : src.partner.split(" ")[0], "deal", describeDeal(lead));

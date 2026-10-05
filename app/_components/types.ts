@@ -34,6 +34,11 @@ export interface Lead {
   statusLabel: string;
   nextStep: string | null;
   visitAt: string | null;
+  /** "2026-10-09T10:00", Israel time — a meeting before there is a contract (green). */
+  meetingAt: string | null;
+  /** "2026-10-12" — the working days once there is a contract (red). */
+  workStart: string | null;
+  workEnd: string | null;
   deal: Deal;
   createdAt: string;
   updatedAt: string;

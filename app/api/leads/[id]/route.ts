@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asUser } from "@/lib/http";
 import { addEvent, isStatus, updateLead, type LeadPatch } from "@/lib/db";
-import { DEAL_KEYS, describeDeal } from "@/lib/deal";
+import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal } from "@/lib/deal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,9 +35,13 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     if ("subPhone" in body) patch.sub_phone = body.subPhone ? String(body.subPhone).replace(/\D/g, "").replace(/^972/, "0") || null : null;
     if ("subPrice" in body) patch.sub_price = num("subPrice");
     if ("subVat" in body) patch.sub_vat = flag("subVat");
+    if ("meetingAt" in body) patch.meeting_at = cleanDateTime(body.meetingAt);
+    if ("workStart" in body) patch.work_start = cleanDate(body.workStart);
+    if ("workEnd" in body) patch.work_end = cleanDate(body.workEnd) ?? (patch.work_start ?? null);
     const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
     const lead = updateLead(id, user.name, patch, isStatus(body.status) ? body.status : null, note);
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(id, user.name, "deal", describeDeal(lead));
+    if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(id, user.name, "calendar", describeCalendar(lead));
     return NextResponse.json({ ok: true, id: lead.id });
   });
 }
