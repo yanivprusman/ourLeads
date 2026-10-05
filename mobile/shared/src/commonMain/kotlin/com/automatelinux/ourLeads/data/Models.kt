@@ -41,11 +41,23 @@ data class Lead(
     val statusLabel: String,
     val nextStep: String? = null,
     val visitAt: String? = null,
+    val deal: Deal = Deal(),
     val createdAt: String,
     val updatedAt: String,
     val lastMessageAt: String? = null,
     val messages: List<Msg> = emptyList(),
     val events: List<LeadEvent> = emptyList(),
+)
+
+/** What the client pays and what the subcontractor gets. vat: true = "+ מע״מ", false = included. */
+@Serializable
+data class Deal(
+    val clientPrice: Double? = null,
+    val clientVat: Boolean? = null,
+    val subName: String? = null,
+    val subPhone: String? = null,
+    val subPrice: Double? = null,
+    val subVat: Boolean? = null,
 )
 
 @Serializable

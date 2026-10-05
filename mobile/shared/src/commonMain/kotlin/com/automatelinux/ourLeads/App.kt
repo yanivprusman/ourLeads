@@ -410,6 +410,7 @@ private fun LeadCard(d: BoardData, l: Lead, onClick: () -> Unit) {
                     val sub = listOfNotNull(l.customerName, l.city, l.visitAt?.let { "ביקור $it" }).joinToString(" · ").ifEmpty { l.trade ?: "" }
                     if (sub.isNotEmpty()) T(sub, 14, color = Muted, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                     l.nextStep?.let { T("← $it", 14, color = Ink2, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
+                    DealLine(l.deal)
                 }
                 if (thumb != null) {
                     Spacer(Modifier.width(12.dp))
@@ -583,6 +584,18 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                                 )
                             }
                         }
+                    }
+                }
+            }
+            item {
+                DealSection(l.deal, busy) { d ->
+                    busy = true
+                    scope.launch {
+                        when (val r = api.setDeal(l.id, d)) {
+                            is Result.Ok -> { error = null; onChanged() }
+                            is Result.Err -> error = r.message
+                        }
+                        busy = false
                     }
                 }
             }
@@ -857,6 +870,179 @@ private fun VoiceDock(
                 Modifier.padding(start = 6.dp).size(44.dp).clip(CircleShape).clickable(enabled = !working && !recording) { typing = !typing },
                 contentAlignment = Alignment.Center,
             ) { Icon(if (typing) Icons.Default.Mic else Icons.Default.Keyboard, if (typing) "דיבור" else "הקלדה", tint = Muted) }
+        }
+    }
+}
+
+
+// ── Deal ─────────────────────────────────────────────────────────────────────
+private const val VAT = 0.18
+private fun net(p: Double, vat: Boolean?) = if (vat == false) p / (1 + VAT) else p
+private fun shekel(n: Double): String {
+    val r = kotlin.math.round(n).toLong()
+    val digits = kotlin.math.abs(r).toString().reversed().chunked(3).joinToString(",").reversed()
+    return (if (r < 0) "-" else "") + "₪" + digits
+}
+private fun margin(d: Deal): Double? =
+    if (d.clientPrice == null || d.subPrice == null) null else net(d.clientPrice, d.clientVat) - net(d.subPrice, d.subVat)
+
+/** What the client pays, what the subcontractor gets, and what stays with us (before VAT). */
+@Composable
+private fun DealSection(deal: Deal, busy: Boolean, onSave: (Deal) -> Unit) {
+    val uri = LocalUriHandler.current
+    var editing by remember(deal) { mutableStateOf(false) }
+    val empty = deal.clientPrice == null && deal.subPrice == null && deal.subName == null
+    Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+        when {
+            editing -> DealForm(deal, busy, onCancel = { editing = false }) { onSave(it); editing = false }
+            empty -> T(
+                "+ סגרתם? הוסיפו מחיר ללקוח ולקבלן המשנה", 15, FontWeight.SemiBold, Muted,
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).border(2.dp, Track, RoundedCornerShape(18.dp))
+                    .clickable { editing = true }.padding(vertical = 16.dp, horizontal = 18.dp),
+            )
+            else -> Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, Line)) {
+                Column {
+                    Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+                        T("העסקה", 14, FontWeight.Bold, Ink2)
+                        Spacer(Modifier.weight(1f))
+                        T("עריכה", 14, color = Harbour, modifier = Modifier.clickable { editing = true })
+                    }
+                    Row(Modifier.height(IntrinsicSize.Min)) {
+                        DealSide("מהלקוח", deal.clientPrice, deal.clientVat, Modifier.weight(1f)) {}
+                        Box(Modifier.width(1.dp).fillMaxHeight().padding(vertical = 12.dp).background(Line))
+                        DealSide("לקבלן המשנה", deal.subPrice, deal.subVat, Modifier.weight(1f)) {
+                            deal.subName?.let { T(it, 14, FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp)) }
+                            deal.subPhone?.let { p ->
+                                Row(Modifier.clickable { uri.openUri("tel:$p") }.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Call, null, tint = Harbour, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    T(prettyPhone(p), 14, color = Harbour)
+                                }
+                            }
+                        }
+                    }
+                    val m = margin(deal)
+                    Row(
+                        Modifier.fillMaxWidth().background(if (m == null) Paper else if (m >= 0) Color(0xFFECF8F3) else Color(0xFFFDE8E8))
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        T("נשאר לנו  ", 14, color = Ink2)
+                        if (m == null) T("— חסר ${if (deal.clientPrice == null) "המחיר ללקוח" else "המחיר לקבלן המשנה"}", 14, color = Muted)
+                        else {
+                            T(shekel(m), 20, FontWeight.Bold, if (m >= 0) Color(0xFF0B5C47) else Danger)
+                            T("  לפני מע״מ", 12, color = Muted)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DealSide(title: String, price: Double?, vat: Boolean?, modifier: Modifier, extra: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.padding(16.dp)) {
+        T(title, 12, color = Muted)
+        if (price == null) T("—", 18, color = Muted, modifier = Modifier.padding(top = 2.dp))
+        else {
+            T(shekel(price), 24, FontWeight.ExtraBold, modifier = Modifier.padding(top = 2.dp))
+            T(
+                when (vat) { true -> "+ מע״מ"; false -> "כולל מע״מ · ${shekel(net(price, false))} לפני"; else -> "מע״מ לא צוין" },
+                12, color = Muted,
+            )
+        }
+        extra()
+    }
+}
+
+@Composable
+private fun DealForm(deal: Deal, busy: Boolean, onCancel: () -> Unit, onSave: (Deal) -> Unit) {
+    fun str(d: Double?) = d?.let { kotlin.math.round(it).toLong().toString() } ?: ""
+    var cp by remember { mutableStateOf(str(deal.clientPrice)) }
+    var cv by remember { mutableStateOf(deal.clientVat ?: true) }
+    var sn by remember { mutableStateOf(deal.subName ?: "") }
+    var sph by remember { mutableStateOf(deal.subPhone ?: "") }
+    var sp by remember { mutableStateOf(str(deal.subPrice)) }
+    var sv by remember { mutableStateOf(deal.subVat ?: true) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White)
+            .border(2.dp, Harbour2.copy(alpha = .4f), RoundedCornerShape(18.dp)).padding(16.dp),
+    ) {
+        T("העסקה", 16, FontWeight.Bold)
+        T("מול הלקוח", 13, FontWeight.SemiBold, Ink2, Modifier.padding(top = 12.dp, bottom = 6.dp))
+        Field(cp, { cp = it.filter(Char::isDigit) }, "₪ סכום", numeric = true)
+        VatToggle(cv) { cv = it }
+        HorizontalDivider(color = Line, modifier = Modifier.padding(vertical = 14.dp))
+        T("מול קבלן המשנה", 13, FontWeight.SemiBold, Ink2, Modifier.padding(bottom = 6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) { Field(sn, { sn = it }, "שם") }
+            Box(Modifier.weight(1f)) { Field(sph, { sph = it }, "טלפון", numeric = true) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Field(sp, { sp = it.filter(Char::isDigit) }, "₪ סכום", numeric = true)
+        VatToggle(sv) { sv = it }
+        Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            T(
+                "שמור עסקה", 15, FontWeight.SemiBold, Color.White,
+                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (busy) Harbour.copy(alpha = .4f) else Harbour)
+                    .clickable(enabled = !busy) {
+                        onSave(
+                            Deal(
+                                clientPrice = cp.toDoubleOrNull(), clientVat = cv,
+                                subName = sn.ifBlank { null }, subPhone = sph.filter(Char::isDigit).ifBlank { null },
+                                subPrice = sp.toDoubleOrNull(), subVat = sv,
+                            ),
+                        )
+                    }.padding(vertical = 14.dp).wrapContentWidth(Alignment.CenterHorizontally),
+            )
+            T(
+                "ביטול", 15, color = Muted,
+                modifier = Modifier.clip(RoundedCornerShape(14.dp)).border(1.dp, Line, RoundedCornerShape(14.dp))
+                    .clickable(onClick = onCancel).padding(horizontal = 20.dp, vertical = 14.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Field(value: String, onChange: (String) -> Unit, hint: String, numeric: Boolean = false) {
+    BasicTextField(
+        value, onChange,
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp, Line, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        textStyle = LocalTextStyle.current.copy(fontSize = 17.sp, fontWeight = if (numeric) FontWeight.SemiBold else FontWeight.Normal),
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = if (numeric) androidx.compose.ui.text.input.KeyboardType.Number else androidx.compose.ui.text.input.KeyboardType.Text),
+        decorationBox = { inner -> if (value.isEmpty()) T(hint, 16, color = Muted); inner() },
+    )
+}
+
+@Composable
+private fun VatToggle(plus: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.padding(top = 8.dp).clip(CircleShape).background(Paper).padding(4.dp)) {
+        listOf(true to "+ מע״מ", false to "כולל מע״מ").forEach { (v, label) ->
+            val sel = v == plus
+            T(
+                label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Muted,
+                Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
+                    .clickable { onChange(v) }.padding(horizontal = 14.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DealLine(d: Deal) {
+    if (d.clientPrice == null && d.subPrice == null) return
+    val m = margin(d)
+    FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        d.clientPrice?.let { T("לקוח ${shekel(it)}", 12, FontWeight.SemiBold, Ink2, Modifier.clip(RoundedCornerShape(6.dp)).background(Paper).padding(horizontal = 8.dp, vertical = 2.dp)) }
+        d.subPrice?.let { T("${d.subName ?: "קבלן משנה"} ${shekel(it)}", 12, FontWeight.SemiBold, Ink2, Modifier.clip(RoundedCornerShape(6.dp)).background(Paper).padding(horizontal = 8.dp, vertical = 2.dp)) }
+        m?.let {
+            T("נשאר ${shekel(it)}", 12, FontWeight.Bold, if (it >= 0) Color(0xFF0B5C47) else Danger,
+                Modifier.clip(RoundedCornerShape(6.dp)).background(if (it >= 0) Color(0xFFDEF5EC) else Color(0xFFFDE8E8)).padding(horizontal = 8.dp, vertical = 2.dp))
         }
     }
 }

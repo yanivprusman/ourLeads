@@ -3,6 +3,7 @@ import { askJson } from "./claude";
 import { SOURCES } from "./config";
 import { STATUS_GUIDE, describeLeads } from "./ingest";
 import { STATUS_LABELS, addEvent, getDb, getLead, isStatus, now, updateLead } from "./db";
+import { DEAL_KEYS, describeDeal } from "./deal";
 
 /**
  * "Talk to it and say the status."
@@ -37,6 +38,12 @@ interface Answer {
     visitAt?: string | null;
     phones?: string[];
     customerName?: string | null;
+    clientPrice?: number | null;
+    clientVat?: boolean | null;
+    subName?: string | null;
+    subPhone?: string | null;
+    subPrice?: number | null;
+    subVat?: boolean | null;
   }[];
   create?: {
     source: string;
@@ -68,6 +75,12 @@ const COMMAND_SCHEMA = {
           visitAt: s,
           customerName: s,
           phones: { type: "array", items: { type: "string" } },
+          clientPrice: { type: ["number", "null"] },
+          clientVat: { type: ["boolean", "null"] },
+          subName: s,
+          subPhone: s,
+          subPrice: { type: ["number", "null"] },
+          subVat: { type: ["boolean", "null"] },
         },
         required: ["leadId"],
       },
@@ -109,6 +122,11 @@ ${describeLeads()}
 דוגמאות: "דיברתי עם אורן מרעננה, לא רלוונטי" → status lost על הליד של אורן.
 "קבעתי עם אנטולי לחמישי בעשר" → status visit_scheduled, visitAt "חמישי 10:00".
 "שלחתי הצעה לשי 3500" → status quoted, note "הצעה 3,500 ₪".
+עסקה — שני צדדים: מה הלקוח משלם (clientPrice) ומה מקבל קבלן המשנה שמבצע (subName, subPhone, subPrice).
+"סגרנו עם הלקוח ב-8000 פלוס מע"מ" → clientPrice 8000, clientVat true. "כולל מע"מ" → clientVat false.
+"סגרנו עם יונתן 050-1234567 על 5000 פלוס מע"מ" כשיונתן הוא מי שמבצע → subName "יונתן", subPhone "0501234567", subPrice 5000, subVat true.
+אם לא ברור אם האדם הוא הלקוח או קבלן המשנה — שאל ב-reply ואל תנחש.
+סגירה עם הלקוח → status won.
 אם נאמר ליד חדש שלא קיים בלוח — הוסף אותו ב-create.
 note: משפט קצר בגוף שלישי שמתעד מה נאמר, כולל מחירים ותאריכים.
 אם לא ברור לאיזה ליד הכוונה — אל תשנה כלום, ושאל ב-reply שאלה קצרה.
@@ -141,8 +159,15 @@ export async function runCommand(said: string, who: string): Promise<CommandResu
     if (c.visitAt !== undefined && c.visitAt !== null) patch.visit_at = c.visitAt;
     if (c.phones?.length) patch.phones = Array.from(new Set([...JSON.parse(before.phones), ...c.phones]));
     if (c.customerName) patch.customer_name = c.customerName;
+    if (c.clientPrice != null) patch.client_price = c.clientPrice;
+    if (c.clientVat != null) patch.client_vat = c.clientVat ? 1 : 0;
+    if (c.subName) patch.sub_name = c.subName;
+    if (c.subPhone) patch.sub_phone = c.subPhone.replace(/\D/g, "").replace(/^972/, "0");
+    if (c.subPrice != null) patch.sub_price = c.subPrice;
+    if (c.subVat != null) patch.sub_vat = c.subVat ? 1 : 0;
     const status = isStatus(c.status) ? c.status : null;
     const after = updateLead(c.leadId, who, patch, status, c.note ?? text);
+    if (DEAL_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "deal", describeDeal(after));
     applied.push({
       leadId: after.id,
       title: after.title,

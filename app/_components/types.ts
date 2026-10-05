@@ -34,11 +34,39 @@ export interface Lead {
   statusLabel: string;
   nextStep: string | null;
   visitAt: string | null;
+  deal: Deal;
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
   messages: Msg[];
   events: LeadEvent[];
+}
+
+export interface Deal {
+  clientPrice: number | null;
+  /** true = "+ מע״מ", false = VAT included, null = not said */
+  clientVat: boolean | null;
+  subName: string | null;
+  subPhone: string | null;
+  subPrice: number | null;
+  subVat: boolean | null;
+}
+
+export const VAT = 0.18;
+
+/** A price before VAT, whichever way it was quoted. */
+export function net(price: number, vat: boolean | null): number {
+  return vat === false ? price / (1 + VAT) : price;
+}
+
+export function shekel(n: number): string {
+  return `₪${Math.round(n).toLocaleString("en-US")}`;
+}
+
+/** What stays with the partnership, before VAT — only when both sides are known. */
+export function margin(d: Deal): number | null {
+  if (d.clientPrice == null || d.subPrice == null) return null;
+  return net(d.clientPrice, d.clientVat) - net(d.subPrice, d.subVat);
 }
 
 export interface BoardData {

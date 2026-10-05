@@ -3,6 +3,7 @@ import path from "node:path";
 import { messagesSince, downloadMedia } from "./bridge";
 import { SOURCES, Source, dataDir, ingestSince } from "./config";
 import { askJson } from "./claude";
+import { describeDeal } from "./deal";
 import { transcribe } from "./transcribe";
 import {
   STATUSES,
@@ -179,7 +180,8 @@ export function describeLeads(): string {
         (phones ? ` | טל: ${phones}` : "") +
         (l.address || l.city ? ` | ${[l.address, l.city].filter(Boolean).join(", ")}` : "") +
         (l.visit_at ? ` | ביקור: ${l.visit_at}` : "") +
-        (l.next_step ? ` | הבא: ${l.next_step}` : "");
+        (l.next_step ? ` | הבא: ${l.next_step}` : "") +
+        (l.client_price != null || l.sub_price != null || l.sub_name ? ` | ${describeDeal(l)}` : "");
     })
     .join("\n");
 }
@@ -196,6 +198,12 @@ interface LeadFields {
   details?: string | null;
   nextStep?: string | null;
   visitAt?: string | null;
+  clientPrice?: number | null;
+  clientVat?: boolean | null;
+  subName?: string | null;
+  subPhone?: string | null;
+  subPrice?: number | null;
+  subVat?: boolean | null;
 }
 
 interface ExtractAnswer {
@@ -215,6 +223,12 @@ function toPatch(f: LeadFields): LeadPatch {
   if (f.details !== undefined) p.details = f.details;
   if (f.nextStep !== undefined) p.next_step = f.nextStep;
   if (f.visitAt !== undefined) p.visit_at = f.visitAt;
+  if (f.clientPrice != null) p.client_price = f.clientPrice;
+  if (f.clientVat != null) p.client_vat = f.clientVat ? 1 : 0;
+  if (f.subName) p.sub_name = f.subName;
+  if (f.subPhone) p.sub_phone = f.subPhone.replace(/\D/g, "").replace(/^972/, "0");
+  if (f.subPrice != null) p.sub_price = f.subPrice;
+  if (f.subVat != null) p.sub_vat = f.subVat ? 1 : 0;
   return p;
 }
 
@@ -250,6 +264,9 @@ function buildPrompt(src: Source, msgs: MessageRow[]): string {
 - details: סיכום של כל מה שידוע על העבודה — מה צריך, מצב, מחיר שדובר, דחיפות — כולל מה שנאמר בהקלטות. 1–4 משפטים.
 - nextStep: מה הצעד הבא ומי עושה אותו, אם ברור.
 - visitAt: מועד ביקור אם נקבע, בטקסט חופשי ("חמישי 09.10").
+- עסקה, רק אם נאמר סכום שסוכם: clientPrice/clientVat = מה הלקוח משלם; subName/subPhone/subPrice/subVat =
+  קבלן המשנה שמבצע את העבודה ומה הוא מקבל. clientVat/subVat: true אם "פלוס מע"מ", false אם "כולל מע"מ".
+  הצעת מחיר שעוד לא נסגרה היא לא עסקה — כתוב אותה ב-details.
 
 לליד קיים (attach) — שלח רק שדות שמשתנים או מתווספים. ב-details של ליד קיים שלח את הסיכום המלא המעודכן.
 note: משפט קצר שמסביר מה השתנה (יוצג בהיסטוריה של הליד).
@@ -278,6 +295,12 @@ const LEAD_FIELDS = {
   details: str,
   nextStep: str,
   visitAt: str,
+  clientPrice: { type: ["number", "null"] },
+  clientVat: { type: ["boolean", "null"] },
+  subName: str,
+  subPhone: str,
+  subPrice: { type: ["number", "null"] },
+  subVat: { type: ["boolean", "null"] },
   status: str,
   note: str,
   messageIds: { type: "array", items: { type: "string" } },
@@ -336,6 +359,11 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
       // Dated by the partner's first message, not by when the server got round to reading it.
       const firstAt = ids.map((i) => byId.get(i)!.sent_at).sort()[0];
       addEvent(leadId, src.partner.split(" ")[0], "created", c.note ?? `ליד חדש מ${src.label}`, null, status, firstAt);
+      const deal = toPatch({ clientPrice: c.clientPrice, clientVat: c.clientVat, subName: c.subName, subPhone: c.subPhone, subPrice: c.subPrice, subVat: c.subVat });
+      if (Object.keys(deal).length) {
+        const lead = updateLead(leadId, src.partner.split(" ")[0], deal, null, null);
+        addEvent(leadId, src.partner.split(" ")[0], "deal", describeDeal(lead), null, null, firstAt);
+      }
       for (const i of ids) {
         setMsg.run(leadId, "done", i, byId.get(i)!.chat_jid);
         touched.add(i);
@@ -352,6 +380,10 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
         isStatus(a.status) ? a.status : null,
         a.note ?? "הודעות חדשות בוואטסאפ",
       );
+      if (a.clientPrice != null || a.subPrice != null || a.subName) {
+        const lead = getLead(a.leadId)!;
+        addEvent(a.leadId, fromMe ? OWNER : src.partner.split(" ")[0], "deal", describeDeal(lead));
+      }
       d.prepare("UPDATE leads SET last_message_at = ? WHERE id = ?").run(lastAt(ids), a.leadId);
       for (const i of ids) {
         setMsg.run(a.leadId, "done", i, byId.get(i)!.chat_jid);

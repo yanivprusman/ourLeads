@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { asUser } from "@/lib/http";
-import { isStatus, updateLead, type LeadPatch } from "@/lib/db";
+import { addEvent, isStatus, updateLead, type LeadPatch } from "@/lib/db";
+import { DEAL_KEYS, describeDeal } from "@/lib/deal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +23,21 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     if ("nextStep" in body) patch.next_step = str("nextStep");
     if ("visitAt" in body) patch.visit_at = str("visitAt");
     if (Array.isArray(body.phones)) patch.phones = body.phones.map((p) => String(p).replace(/\D/g, "")).filter(Boolean);
+    const num = (k: string) => {
+      if (body[k] === null || body[k] === "") return null;
+      const n = Number(String(body[k]).replace(/[^\d.]/g, ""));
+      return Number.isFinite(n) ? n : null;
+    };
+    const flag = (k: string) => (body[k] === null ? null : body[k] ? 1 : 0);
+    if ("clientPrice" in body) patch.client_price = num("clientPrice");
+    if ("clientVat" in body) patch.client_vat = flag("clientVat");
+    if ("subName" in body) patch.sub_name = str("subName");
+    if ("subPhone" in body) patch.sub_phone = body.subPhone ? String(body.subPhone).replace(/\D/g, "").replace(/^972/, "0") || null : null;
+    if ("subPrice" in body) patch.sub_price = num("subPrice");
+    if ("subVat" in body) patch.sub_vat = flag("subVat");
     const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
     const lead = updateLead(id, user.name, patch, isStatus(body.status) ? body.status : null, note);
+    if (DEAL_KEYS.some((k) => k in patch)) addEvent(id, user.name, "deal", describeDeal(lead));
     return NextResponse.json({ ok: true, id: lead.id });
   });
 }

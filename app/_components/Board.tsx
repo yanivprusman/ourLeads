@@ -11,6 +11,8 @@ import {
   STATUS_TONE,
   heat,
   intlPhone,
+  margin,
+  shekel,
   prettyPhone,
   when,
   type BoardData,
@@ -270,6 +272,7 @@ function LeadCard({ lead: l, data, now, onOpen }: { lead: Lead; data: BoardData;
             {[l.customerName, l.city, l.visitAt && `ביקור ${l.visitAt}`].filter(Boolean).join(" · ") || l.trade}
           </p>
           {l.nextStep && <p className="text-sm text-ink-2 mt-1.5 line-clamp-1">← {l.nextStep}</p>}
+          <DealLine lead={l} />
         </div>
         {thumb && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -297,6 +300,32 @@ function LeadCard({ lead: l, data, now, onOpen }: { lead: Lead; data: BoardData;
         </div>
       )}
     </article>
+  );
+}
+
+/** The deal in one line on the card: what the client pays, and what stays with us. */
+function DealLine({ lead }: { lead: Lead }) {
+  const d = lead.deal;
+  const m = margin(d);
+  if (d.clientPrice == null && d.subPrice == null) return null;
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[12.5px]">
+      {d.clientPrice != null && (
+        <span className="rounded-md bg-paper px-2 py-0.5 tabular-nums">
+          לקוח <b>{shekel(d.clientPrice)}</b>
+        </span>
+      )}
+      {d.subPrice != null && (
+        <span className="rounded-md bg-paper px-2 py-0.5 tabular-nums">
+          {d.subName ?? "קבלן משנה"} <b>{shekel(d.subPrice)}</b>
+        </span>
+      )}
+      {m != null && (
+        <span className={`rounded-md px-2 py-0.5 font-bold tabular-nums ${m >= 0 ? "bg-[#def5ec] text-[#0b5c47]" : "bg-[#fde8e8] text-[#9b1c1c]"}`}>
+          נשאר {shekel(m)}
+        </span>
+      )}
+    </p>
   );
 }
 

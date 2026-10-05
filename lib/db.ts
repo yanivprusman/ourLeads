@@ -111,6 +111,18 @@ export function getDb(): DatabaseSync {
       error TEXT
     );
   `);
+  // The deal: what the client pays, and what the subcontractor who does it gets.
+  // Added after the first leads existed, so it is a migration, not part of CREATE.
+  const cols = new Set((db.prepare("PRAGMA table_info(leads)").all() as { name: string }[]).map((c) => c.name));
+  for (const [name, type] of [
+    ["client_price", "REAL"],
+    ["client_vat", "INTEGER"],
+    ["sub_name", "TEXT"],
+    ["sub_phone", "TEXT"],
+    ["sub_price", "REAL"],
+    ["sub_vat", "INTEGER"],
+  ])
+    if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
   return db;
 }
 
@@ -131,6 +143,13 @@ export interface LeadRow {
   status: Status;
   next_step: string | null;
   visit_at: string | null;
+  client_price: number | null;
+  /** 1 = the price is before VAT (״+ מע״מ״), 0 = VAT included, null = not said. */
+  client_vat: number | null;
+  sub_name: string | null;
+  sub_phone: string | null;
+  sub_price: number | null;
+  sub_vat: number | null;
   created_at: string;
   updated_at: string;
   last_message_at: string | null;
@@ -204,6 +223,12 @@ export interface LeadPatch {
   details?: string | null;
   next_step?: string | null;
   visit_at?: string | null;
+  client_price?: number | null;
+  client_vat?: number | null;
+  sub_name?: string | null;
+  sub_phone?: string | null;
+  sub_price?: number | null;
+  sub_vat?: number | null;
 }
 
 const PATCHABLE: (keyof LeadPatch)[] = [
@@ -216,6 +241,12 @@ const PATCHABLE: (keyof LeadPatch)[] = [
   "details",
   "next_step",
   "visit_at",
+  "client_price",
+  "client_vat",
+  "sub_name",
+  "sub_phone",
+  "sub_price",
+  "sub_vat",
 ];
 
 /** Apply field changes and a status change, logging each as an event. */
@@ -230,12 +261,12 @@ export function updateLead(
   const lead = getLead(id);
   if (!lead) throw new Error(`no lead #${id}`);
   const sets: string[] = [];
-  const vals: (string | null)[] = [];
+  const vals: (string | number | null)[] = [];
   for (const key of PATCHABLE) {
     if (!(key in patch)) continue;
     const v = patch[key];
     sets.push(`${key} = ?`);
-    vals.push(key === "phones" ? JSON.stringify(v ?? []) : ((v as string | null) ?? null));
+    vals.push(key === "phones" ? JSON.stringify(v ?? []) : ((v as string | number | null) ?? null));
   }
   if (status && status !== lead.status) {
     sets.push("status = ?");

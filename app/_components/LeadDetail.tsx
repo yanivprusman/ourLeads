@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { ChatIcon, PhoneIcon } from "./Board";
+import DealCard from "./DealCard";
 import {
   PARTNER_TONE,
   PIPELINE,
@@ -50,7 +51,7 @@ export default function LeadDetail({
     return () => window.removeEventListener("keydown", onKey);
   }, [photo, onClose]);
 
-  async function patch(body: Record<string, unknown>) {
+  async function patch(body: Record<string, unknown>): Promise<boolean> {
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/leads/${lead.id}`, {
@@ -59,11 +60,13 @@ export default function LeadDetail({
       body: JSON.stringify(body),
     });
     setBusy(false);
-    if (!res.ok) setError((await res.json()).error ?? `HTTP ${res.status}`);
-    else {
-      setNote("");
-      onChanged();
+    if (!res.ok) {
+      setError((await res.json()).error ?? `HTTP ${res.status}`);
+      return false;
     }
+    if ("note" in body) setNote("");
+    onChanged();
+    return true;
   }
   const setStatus = (s: string) => s !== lead.status && !busy && patch({ status: s, note: note.trim() || undefined });
 
@@ -210,6 +213,8 @@ export default function LeadDetail({
               ))}
             </div>
           </div>
+
+          <DealCard key={lead.id} deal={lead.deal} busy={busy} onSave={(d) => patch(d)} />
 
           <div className="bg-white rounded-2xl border border-line divide-y divide-line">
             {lead.nextStep && <Fact k="הצעד הבא" v={lead.nextStep} strong />}

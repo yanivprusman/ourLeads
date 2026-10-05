@@ -62,6 +62,22 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
+    /** Replace the deal on a lead. Empty fields clear. */
+    suspend fun setDeal(leadId: Int, d: Deal): Result<Unit> {
+        fun n(v: Double?) = v?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull
+        fun b(v: Boolean?, on: Double?) = if (on == null || v == null) kotlinx.serialization.json.JsonNull else JsonPrimitive(v)
+        fun t(v: String?) = v?.takeIf { it.isNotBlank() }?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull
+        val body = JsonObject(
+            mapOf(
+                "clientPrice" to n(d.clientPrice), "clientVat" to b(d.clientVat, d.clientPrice),
+                "subName" to t(d.subName), "subPhone" to t(d.subPhone),
+                "subPrice" to n(d.subPrice), "subVat" to b(d.subVat, d.subPrice),
+            ),
+        ).toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/leads/$leadId", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     suspend fun sayText(text: String): Result<CommandReply> {
         val body = JsonObject(mapOf("text" to JsonPrimitive(text))).toString().encodeToByteArray()
         return command(httpRequest("POST", "$base/api/command", token, body, "application/json; charset=utf-8"))
