@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
     id("android-flavors")
 }
 
@@ -83,4 +85,19 @@ dependencies {
     // Core
     implementation(libs.core.ktx)
     implementation(libs.activity.compose)
+
+    // Hilt exists for feedback-lib (its view models are @HiltViewModel).
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.android.compiler)
+    implementation(libs.hilt.navigation.compose)
+
+    // Retrofit/Gson exist for feedback-lib's FeedbackApi, which talks to the same
+    // Next.js backend (API_BASE_URL) at /api/feedback/*.
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.gson)
+
+    "devImplementation"(project(":feedback-lib"))
 }

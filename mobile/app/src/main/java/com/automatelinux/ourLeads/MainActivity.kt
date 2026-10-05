@@ -19,8 +19,12 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.draw.scale
+import com.automatelinux.ourLeads.ui.feedback.FeedbackHost
+import dagger.hilt.android.AndroidEntryPoint
 
 // Thin Android launcher — all UI lives in the shared commonMain App() composable.
+// @AndroidEntryPoint: feedback-lib's overlay (dev flavor) resolves Hilt view models here.
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,18 +35,20 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         setContent {
-            App(
-                baseUrl = BuildConfig.API_BASE_URL,
-                token = BuildConfig.API_TOKEN,
-                fontFamily = Heebo,
-                mark = { modifier ->
-                    // The launcher icon itself: same two layers, cropped like a launcher does.
-                    Box(modifier.clip(RoundedCornerShape(24))) {
-                        Image(painterResource(R.drawable.ic_launcher_background), null, Modifier.fillMaxSize().scale(1.5f), contentScale = ContentScale.Crop)
-                        Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize().scale(1.5f), contentScale = ContentScale.Crop)
-                    }
-                },
-            )
+            FeedbackHost {
+                App(
+                    baseUrl = BuildConfig.API_BASE_URL,
+                    token = BuildConfig.API_TOKEN,
+                    fontFamily = Heebo,
+                    mark = { modifier ->
+                        // The launcher icon itself: same two layers, cropped like a launcher does.
+                        Box(modifier.clip(RoundedCornerShape(24))) {
+                            Image(painterResource(R.drawable.ic_launcher_background), null, Modifier.fillMaxSize().scale(1.5f), contentScale = ContentScale.Crop)
+                            Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize().scale(1.5f), contentScale = ContentScale.Crop)
+                        }
+                    },
+                )
+            }
         }
     }
 }
