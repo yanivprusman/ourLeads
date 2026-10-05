@@ -1,5 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ourLeads: a partner's WhatsApp message (blue, behind) becomes a lead card (white)
+     that gets taken care of (amber check). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFF" android:pathData="M38,38 h32 a6,6 0 0 1 6,6 v20 a6,6 0 0 1 -6,6 h-32 a6,6 0 0 1 -6,-6 v-20 a6,6 0 0 1 6,-6 z" />
-    <path android:fillColor="#B2DFDB" android:pathData="M46,48 h16 v4 h-16 z M46,56 h16 v4 h-16 z" />
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- the partner's message -->
+    <path android:pathData="M45,33a7,7 0,0 1,7 -7h20a7,7 0,0 1,7 7v15a7,7 0,0 1,-7 7h-1l1,7 -8,-7H52a7,7 0,0 1,-7 -7z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="62" android:startY="26" android:endX="62" android:endY="62">
+                <item android:offset="0" android:color="#FF8FD3F4"/>
+                <item android:offset="1" android:color="#FF4FA6D6"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- soft shadow under the card -->
+    <path android:fillColor="#3304121F" android:pathData="M29,48a8,8 0,0 1,8 -8h27a8,8 0,0 1,8 8v20a8,8 0,0 1,-8 8H48l-10,8 0.8,-8H37a8,8 0,0 1,-8 -8z"/>
+    <path android:fillColor="#1F04121F" android:pathData="M28,49a9,9 0,0 1,9 -9h27a9,9 0,0 1,9 9v20a9,9 0,0 1,-9 9H48l-10,8 0.8,-8H37a9,9 0,0 1,-9 -9z"/>
+    <!-- the lead card -->
+    <path android:pathData="M29,46a8,8 0,0 1,8 -8h27a8,8 0,0 1,8 8v20a8,8 0,0 1,-8 8H48l-10,8 0.8,-8H37a8,8 0,0 1,-8 -8z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="50" android:startY="38" android:endX="50" android:endY="82">
+                <item android:offset="0" android:color="#FFFFFFFF"/>
+                <item android:offset="1" android:color="#FFE6EEF5"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#FF0D2A43" android:pathData="M38.5,46h17a2.5,2.5 0,0 1,0 5h-17a2.5,2.5 0,0 1,0 -5z"/>
+    <path android:fillColor="#FF97ADC0" android:pathData="M38,55.5h9a2,2 0,0 1,0 4h-9a2,2 0,0 1,0 -4z"/>
+    <!-- taken care of -->
+    <path android:pathData="M62.5,55.5a8.5,8.5 0,1 1,0 17a8.5,8.5 0,1 1,0 -17z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="54" android:startY="55.5" android:endX="71" android:endY="72.5">
+                <item android:offset="0" android:color="#FFFFD67E"/>
+                <item android:offset="1" android:color="#FFEF8A24"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M58.6,64.2l2.7,2.8 5,-5.6"/>
 </vector>

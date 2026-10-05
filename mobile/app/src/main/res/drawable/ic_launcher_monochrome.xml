@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13 themed icon: the same two shapes as silhouettes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FF000000" android:fillAlpha="0.55" android:pathData="M45,33a7,7 0,0 1,7 -7h20a7,7 0,0 1,7 7v15a7,7 0,0 1,-7 7h-1l1,7 -8,-7H52a7,7 0,0 1,-7 -7z"/>
+    <path android:fillColor="#FF000000" android:pathData="M29,46a8,8 0,0 1,8 -8h27a8,8 0,0 1,8 8v20a8,8 0,0 1,-8 8H48l-10,8 0.8,-8H37a8,8 0,0 1,-8 -8z"/>
+</vector>
