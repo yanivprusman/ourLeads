@@ -5,8 +5,7 @@ import DealCard from "./DealCard";
 import ScheduleCard from "./ScheduleCard";
 import {
   PARTNER_TONE,
-  PIPELINE,
-  SIDE,
+  STATES,
   STATUS_TONE,
   intlPhone,
   prettyPhone,
@@ -40,7 +39,6 @@ export default function LeadDetail({
   const place = [lead.address, lead.city].filter(Boolean).join(", ");
   const photos = lead.messages.filter((m) => m.mediaType === "image" && m.mediaUrl).map((m) => m.mediaUrl!);
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
-  const step = PIPELINE.indexOf(lead.status);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && (photo ? setPhoto(null) : onClose());
@@ -155,59 +153,49 @@ export default function LeadDetail({
             </div>
           )}
 
-          {/* Where the lead is on the road from a WhatsApp message to a finished job. */}
-          <div className="bg-white rounded-2xl border border-line p-4">
-            <div className="flex items-center">
-              {PIPELINE.map((s, i) => {
-                const reached = step >= 0 && i <= step;
-                const current = s === lead.status;
-                return (
-                  <div key={s} className="flex-1 flex items-center last:flex-none">
+          {/* Where the lead stands — a meeting or work can be set with or without a date. */}
+          <div className="bg-white rounded-2xl border border-line p-3 flex items-center gap-2">
+            {lead.status === "removed" ? (
+              <>
+                <span className="flex-1 text-sm text-muted px-1">הליד הוסר מהלוח</span>
+                <button
+                  data-id="lead-restore"
+                  disabled={busy}
+                  onClick={() => setStatus("none")}
+                  className="rounded-full px-4 py-2 text-sm font-semibold bg-harbour text-white hover:opacity-90 cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                >
+                  החזר ללוח
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex-1 grid grid-cols-3 gap-1 rounded-xl bg-paper p-1">
+                  {STATES.map((s) => (
                     <button
+                      key={s}
                       data-id={`lead-status-${s}`}
                       disabled={busy}
                       onClick={() => setStatus(s)}
-                      className="group flex flex-col items-center gap-1.5 cursor-pointer disabled:cursor-wait"
-                      title={label(s)}
+                      className={`rounded-lg py-2 text-sm transition cursor-pointer disabled:cursor-wait flex items-center justify-center gap-1.5 ${
+                        s === lead.status ? `${STATUS_TONE[s].pill} font-bold shadow-sm` : "text-muted hover:text-ink hover:bg-white"
+                      }`}
                     >
-                      <span
-                        className={`grid place-items-center rounded-full transition ${
-                          current
-                            ? `size-8 ${STATUS_TONE[s].dot} text-white ring-4 ring-offset-0 ring-current/10 shadow`
-                            : reached
-                              ? "size-6 bg-harbour text-white"
-                              : "size-6 bg-paper border-2 border-line group-hover:border-harbour-2"
-                        }`}
-                      >
-                        {reached && !current && <Check />}
-                        {current && <span className="size-2 rounded-full bg-white" />}
-                      </span>
-                      <span className={`text-[11px] whitespace-nowrap ${current ? "font-bold text-ink" : "text-muted group-hover:text-ink"}`}>
-                        {label(s)}
-                      </span>
+                      <span className={`size-2 rounded-full ${STATUS_TONE[s].dot}`} />
+                      {label(s)}
                     </button>
-                    {i < PIPELINE.length - 1 && (
-                      <span className={`flex-1 h-0.5 mx-1 -mt-5 rounded ${step > i ? "bg-harbour" : "bg-line"}`} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-2 mt-4 pt-3 border-t border-line">
-              {SIDE.map((s) => (
+                  ))}
+                </div>
                 <button
-                  key={s}
-                  data-id={`lead-status-${s}`}
+                  data-id="lead-remove"
                   disabled={busy}
-                  onClick={() => setStatus(s)}
-                  className={`rounded-full px-3 py-1.5 text-sm transition cursor-pointer disabled:cursor-wait ${
-                    s === lead.status ? `${STATUS_TONE[s].pill} font-bold ring-1 ring-current` : "text-muted hover:bg-paper hover:text-ink border border-line"
-                  }`}
+                  onClick={() => setStatus("removed")}
+                  title="הסר מהלוח — הליד ירד או שהעבודה הסתיימה"
+                  className="rounded-full px-3 py-2 text-sm text-muted border border-line hover:text-[#b91c1c] hover:border-[#fca5a5] cursor-pointer disabled:opacity-50 disabled:cursor-wait"
                 >
-                  {label(s)}
+                  הסר
                 </button>
-              ))}
-            </div>
+              </>
+            )}
           </div>
 
           <ScheduleCard key={`s${lead.id}-${lead.meetingAt}-${lead.workStart}-${lead.workEnd}`} lead={lead} busy={busy} onSave={(b) => patch(b)} />
@@ -357,14 +345,6 @@ function EventRow({ e }: { e: LeadEvent }) {
       )}
       {e.text && <p className="text-ink-2 mt-0.5 leading-relaxed">{e.text}</p>}
     </li>
-  );
-}
-
-function Check() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M5 12.5l4.5 4.5L19 7.5" />
-    </svg>
   );
 }
 

@@ -83,20 +83,16 @@ export interface BoardData {
   pending: number;
 }
 
-/** The main road a lead travels. on_hold and lost are side exits, done is the end. */
-export const PIPELINE = ["new", "contacted", "visit_scheduled", "quoted", "won", "done"];
-export const SIDE = ["on_hold", "lost"];
-export const CLOSED = ["done", "lost"];
+/** Where a lead stands: nothing yet, a meeting set, or work agreed — dates optional. */
+export const STATES = ["none", "meeting", "work"];
+/** A lead taken off the board. Still there, behind the הוסרו tile, and can come back. */
+export const CLOSED = ["removed"];
 
 export const STATUS_TONE: Record<string, { dot: string; pill: string; rail: string }> = {
-  new: { dot: "bg-amber", pill: "bg-amber-soft text-[#8a4a0b]", rail: "bg-amber" },
-  contacted: { dot: "bg-harbour-2", pill: "bg-[#e3f1fa] text-harbour", rail: "bg-harbour-2" },
-  visit_scheduled: { dot: "bg-[#6c5ce7]", pill: "bg-[#ecebfd] text-[#3f33a8]", rail: "bg-[#6c5ce7]" },
-  quoted: { dot: "bg-[#b0489a]", pill: "bg-[#f8e8f4] text-[#7d2a6b]", rail: "bg-[#b0489a]" },
-  won: { dot: "bg-israel", pill: "bg-[#def5ec] text-[#0b5c47]", rail: "bg-israel" },
-  done: { dot: "bg-[#8a9aab]", pill: "bg-[#eceff3] text-ink-2", rail: "bg-[#8a9aab]" },
-  on_hold: { dot: "bg-[#b9c4cf]", pill: "bg-[#eef1f4] text-muted", rail: "bg-[#b9c4cf]" },
-  lost: { dot: "bg-[#d4dbe2]", pill: "bg-[#f3f5f7] text-[#8a9aab] line-through", rail: "bg-[#d4dbe2]" },
+  none: { dot: "bg-amber", pill: "bg-amber-soft text-[#8a4a0b]", rail: "bg-amber" },
+  meeting: { dot: "bg-[#16a34a]", pill: "bg-[#dcfce7] text-[#166534]", rail: "bg-[#16a34a]" },
+  work: { dot: "bg-[#dc2626]", pill: "bg-[#fee2e2] text-[#991b1b]", rail: "bg-[#dc2626]" },
+  removed: { dot: "bg-[#b9c4cf]", pill: "bg-[#f3f5f7] text-[#8a9aab]", rail: "bg-[#d4dbe2]" },
 };
 
 export const PARTNER_TONE: Record<string, { chip: string; initial: string }> = {

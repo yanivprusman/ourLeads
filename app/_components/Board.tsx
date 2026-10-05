@@ -7,8 +7,7 @@ import Calendar, { sayDay } from "./Calendar";
 import {
   CLOSED,
   PARTNER_TONE,
-  PIPELINE,
-  SIDE,
+  STATES,
   STATUS_TONE,
   intlPhone,
   margin,
@@ -19,7 +18,7 @@ import {
   type Lead,
 } from "./types";
 
-type View = "open" | "all" | string;
+type View = "open" | string;
 
 export default function Board() {
   const [data, setData] = useState<BoardData | null>(null);
@@ -27,7 +26,6 @@ export default function Board() {
   const [view, setView] = useState<View>("open");
   const [mode, setMode] = useState<"leads" | "calendar">("leads");
   const [source, setSource] = useState<string>("all");
-  const [dated, setDated] = useState<Dated>("any");
   const [openId, setOpenId] = useState<number | null>(null);
   const [reply, setReply] = useState<CommandReply | null>(null);
 
@@ -71,13 +69,10 @@ export default function Board() {
       </main>
     );
 
-  const leads = inSource.filter((l) =>
-    (dated === "any" || datedOf(l) === dated) &&
-    (view === "all" ? true : view === "open" ? !CLOSED.includes(l.status) : l.status === view),
-  );
-  // The ones waiting for a first call go first, oldest-waiting on top: they are losing value.
-  const fresh = view === "open" ? leads.filter((l) => l.status === "new").sort((a, b) => (a.lastMessageAt ?? a.createdAt).localeCompare(b.lastMessageAt ?? b.createdAt)) : [];
-  const rest = view === "open" ? leads.filter((l) => l.status !== "new") : leads;
+  const leads = inSource.filter((l) => (view === "open" ? !CLOSED.includes(l.status) : l.status === view));
+  // Nothing done yet goes first, longest-waiting on top.
+  const fresh = view === "open" ? leads.filter((l) => l.status === "none").sort((a, b) => (a.lastMessageAt ?? a.createdAt).localeCompare(b.lastMessageAt ?? b.createdAt)) : [];
+  const rest = view === "open" ? leads.filter((l) => l.status !== "none") : leads;
   const open = data.leads.find((l) => l.id === openId) ?? null;
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
   const openCount = inSource.filter((l) => !CLOSED.includes(l.status)).length;
@@ -138,46 +133,26 @@ export default function Board() {
               </button>
             ))}
           </div>
-          {mode === "leads" && (
-            <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
-              {DATED.map(([id, label, dot]) => (
-                <button
-                  key={id}
-                  data-id={`filter-dated-${id}`}
-                  onClick={() => setDated(id)}
-                  className={`rounded-full px-3.5 py-1.5 transition cursor-pointer flex items-center gap-1.5 ${
-                    dated === id ? "bg-white text-ink font-semibold shadow" : "text-white/80 hover:text-white"
-                  }`}
-                >
-                  {dot && <span className={`size-2 rounded-full ${dot}`} />}
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
           </div>
         </div>
 
-        {/* The pipeline: every stage a lead can be in, with how many are there now. */}
+        {/* Where the leads stand, with how many are in each. */}
         <nav className={`max-w-3xl mx-auto px-4 pb-4 overflow-x-auto no-scrollbar ${mode === "calendar" ? "hidden" : ""}`}>
           <div className="flex items-stretch gap-1 min-w-max">
             <Stage
               id="open"
-              label="פתוחים"
+              label="הכל"
               n={openCount}
               active={view === "open"}
               onClick={() => setView("open")}
               wide
             />
             <span className="w-px bg-white/15 mx-1" />
-            {PIPELINE.map((s) => (
+            {STATES.map((s) => (
               <Stage key={s} id={s} label={label(s)} n={counts[s] ?? 0} active={view === s} onClick={() => setView(s)} dot={STATUS_TONE[s].dot} />
             ))}
             <span className="w-px bg-white/15 mx-1" />
-            {SIDE.map((s) => (
-              <Stage key={s} id={s} label={label(s)} n={counts[s] ?? 0} active={view === s} onClick={() => setView(s)} dot={STATUS_TONE[s].dot} />
-            ))}
-            <Stage id="all" label="הכל" n={inSource.length} active={view === "all"} onClick={() => setView("all")} />
+            <Stage id="removed" label="הוסרו" n={counts.removed ?? 0} active={view === "removed"} onClick={() => setView("removed")} dot={STATUS_TONE.removed.dot} />
           </div>
         </nav>
       </header>
@@ -206,7 +181,7 @@ export default function Board() {
           </div>
         )}
 
-        {data.unassigned.length > 0 && (view === "open" || view === "all") && <Unassigned data={data} onChanged={load} />}
+        {data.unassigned.length > 0 && view === "open" && <Unassigned data={data} onChanged={load} />}
           </>
         )}
       </div>
@@ -274,23 +249,11 @@ function PartnerBadge({ source, data }: { source: string; data: BoardData }) {
   );
 }
 
-/** Has a date been set on this lead? Work (red) outranks a meeting (green); "none" is usually one nobody has talked to yet. */
-type Dated = "any" | "meeting" | "work" | "none";
-const DATED: [Dated, string, string | null][] = [
-  ["any", "כל המועדים", null],
-  ["meeting", "פגישה", "bg-[#16a34a]"],
-  ["work", "עבודה", "bg-[#dc2626]"],
-  ["none", "בלי מועד", "bg-white/50"],
-];
-function datedOf(l: Lead): Dated {
-  return l.workStart ? "work" : l.meetingAt ? "meeting" : "none";
-}
-
 function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOpen: () => void }) {
   const tone = STATUS_TONE[l.status];
   const thumb = l.messages.find((m) => m.mediaType === "image" && m.mediaUrl)?.mediaUrl;
   const phone = l.phones[0];
-  const faded = l.status === "lost" || l.status === "done";
+  const faded = l.status === "removed";
   return (
     <article
       className={`rise relative bg-white rounded-2xl border border-line shadow-[0_1px_2px_rgba(13,42,67,.04)] overflow-hidden transition hover:shadow-md hover:border-harbour-2/30 ${faded ? "opacity-70" : ""}`}
@@ -299,16 +262,12 @@ function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOp
       <button data-id="lead-card" onClick={onOpen} className="w-full text-start p-4 ps-5 flex gap-3 cursor-pointer">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            {l.status !== "new" && <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${tone.pill}`}>{l.statusLabel}</span>}
             <PartnerBadge source={l.source} data={data} />
-            {l.workStart ? (
-              <span className="ms-auto rounded-full bg-[#fee2e2] text-[#991b1b] px-2 py-0.5 text-[11.5px] font-bold" title="נקבע מועד לעבודה">
-                עבודה {sayDay(l.workStart)}
-                {l.workEnd && l.workEnd !== l.workStart ? ` – ${sayDay(l.workEnd)}` : ""}
-              </span>
-            ) : l.meetingAt ? (
-              <span className="ms-auto rounded-full bg-[#dcfce7] text-[#166534] px-2 py-0.5 text-[11.5px] font-bold" title="נקבעה פגישה — פוטנציאל לכסף">
-                פגישה {sayDay(l.meetingAt.slice(0, 10))} {l.meetingAt.slice(11, 16)}
+            {l.status !== "none" ? (
+              <span className={`ms-auto rounded-full px-2 py-0.5 text-[11.5px] font-bold ${tone.pill}`}>
+                {l.statusLabel}
+                {l.status === "work" && l.workStart ? ` ${sayDay(l.workStart)}${l.workEnd && l.workEnd !== l.workStart ? ` – ${sayDay(l.workEnd)}` : ""}` : ""}
+                {l.status === "meeting" && l.meetingAt ? ` ${sayDay(l.meetingAt.slice(0, 10))} ${l.meetingAt.slice(11, 16)}` : ""}
               </span>
             ) : (
               <span className="ms-auto text-xs text-muted tabular-nums">{when(l.lastMessageAt ?? l.createdAt)}</span>

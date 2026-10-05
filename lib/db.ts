@@ -16,19 +16,24 @@ import { dataDir } from "./config";
  *   this is how you find out who said it.
  */
 
-export const STATUSES = [
-  "new",
-  "contacted",
-  "visit_scheduled",
-  "quoted",
-  "won",
-  "done",
-  "on_hold",
-  "lost",
-] as const;
+/**
+ * Where a lead stands — three states and a way out. A meeting or work can be
+ * set with or without a date; the dates live on the calendar, not here.
+ * Yaniv, 2026-10-06: "a simple tristate none meeting work" + a remove button.
+ * The eight-step pipeline before it (חדש … בוצע) was more than anyone used.
+ */
+export const STATUSES = ["none", "meeting", "work", "removed"] as const;
 export type Status = (typeof STATUSES)[number];
 
 export const STATUS_LABELS: Record<Status, string> = {
+  none: "ללא",
+  meeting: "פגישה",
+  work: "עבודה",
+  removed: "הוסר",
+};
+
+/** Names of the old pipeline, so history written before 2026-10-06 still reads. */
+export const LEGACY_STATUS_LABELS: Record<string, string> = {
   new: "חדש",
   contacted: "בקשר",
   visit_scheduled: "ביקור נקבע",
@@ -39,8 +44,12 @@ export const STATUS_LABELS: Record<Status, string> = {
   lost: "ירד",
 };
 
+export function statusLabel(s: string): string {
+  return STATUS_LABELS[s as Status] ?? LEGACY_STATUS_LABELS[s] ?? s;
+}
+
 /** Statuses a lead is finished in. Everything else is still on someone's plate. */
-export const CLOSED: Status[] = ["done", "lost"];
+export const CLOSED: Status[] = ["removed"];
 
 export function isStatus(s: unknown): s is Status {
   return typeof s === "string" && (STATUSES as readonly string[]).includes(s);
@@ -66,7 +75,7 @@ export function getDb(): DatabaseSync {
       address TEXT,
       city TEXT,
       details TEXT,
-      status TEXT NOT NULL DEFAULT 'new',
+      status TEXT NOT NULL DEFAULT 'none',
       next_step TEXT,
       visit_at TEXT,
       created_at TEXT NOT NULL,
@@ -127,6 +136,15 @@ export function getDb(): DatabaseSync {
     ["work_end", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
+  // The old pipeline → the three states. Idempotent: rows already converted match no WHEN.
+  db.exec(`
+    UPDATE leads SET status = CASE
+      WHEN status IN ('done', 'lost') THEN 'removed'
+      WHEN status = 'won' OR work_start IS NOT NULL THEN 'work'
+      WHEN status IN ('visit_scheduled', 'quoted') OR meeting_at IS NOT NULL THEN 'meeting'
+      ELSE 'none' END
+    WHERE status IN ('new', 'contacted', 'visit_scheduled', 'quoted', 'won', 'done', 'on_hold', 'lost');
+  `);
   return db;
 }
 
@@ -275,13 +293,11 @@ export function updateLead(
   const d = getDb();
   const lead = getLead(id);
   if (!lead) throw new Error(`no lead #${id}`);
-  // A date on the calendar says where the lead is: a meeting means a visit is set;
-  // working dates mean there is a contract. Only ever moves a lead forward.
+  // A date on the calendar says where the lead is: a meeting date means a meeting,
+  // working dates mean work. Only ever moves a lead forward, never out of removed.
   if (!status) {
-    const order = ["new", "contacted", "visit_scheduled", "quoted", "won", "done"];
-    const at = order.indexOf(lead.status);
-    if (patch.work_start && at >= 0 && at < order.indexOf("won")) status = "won";
-    else if (patch.meeting_at && at >= 0 && at < order.indexOf("visit_scheduled")) status = "visit_scheduled";
+    if (patch.work_start && (lead.status === "none" || lead.status === "meeting")) status = "work";
+    else if (patch.meeting_at && lead.status === "none") status = "meeting";
   }
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];

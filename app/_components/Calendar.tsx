@@ -31,7 +31,7 @@ function entriesByDay(leads: Lead[]): Map<string, Entry[]> {
   const map = new Map<string, Entry[]>();
   const add = (e: Entry) => map.set(e.day, [...(map.get(e.day) ?? []), e]);
   for (const l of leads) {
-    if (l.status === "lost") continue;
+    if (l.status === "removed") continue;
     if (l.meetingAt) add({ kind: "meeting", lead: l, day: l.meetingAt.slice(0, 10), time: l.meetingAt.slice(11, 16) });
     if (l.workStart) {
       const end = l.workEnd && l.workEnd >= l.workStart ? l.workEnd : l.workStart;

@@ -263,8 +263,8 @@ function buildPrompt(src: Source, msgs: MessageRow[]): string {
 שיחה שלא קשורה ללקוח מסוים) — ב-ignore.
 
 סטטוסים אפשריים: ${STATUS_GUIDE}.
-ליד חדש מתחיל ב-new אלא אם ההודעות כבר אומרות יותר (למשל ${OWNER} כתב שקבע ביקור → visit_scheduled).
-״תתקדם הלאה, אל תתייחס אליו עד שאעדכן״ → on_hold.
+ליד חדש מתחיל ב-none. meeting = נקבעה פגישה/ביקור אצל הלקוח (גם בלי תאריך); work = סגרו עבודה (גם בלי תאריך).
+removed רק כשנאמר במפורש שהליד ירד או שהעבודה הסתיימה. כל השאר (דיברו, שלחו הצעה, ממתינים) — note, לא status.
 
 שדות ליד:
 - title: כותרת קצרה שתזהה את הליד ברשימה — עבודה + מקום, למשל "ניקוי גג – רעננה" או "איטום גג רעפים – באר שבע".
@@ -291,7 +291,7 @@ ${describeLeads()}
 ${msgs.map((m) => describeMessage(m, src.partner)).join("\n")}
 
 התשובה במבנה הבא:
-{"create":[{"messageIds":["..."],"title":"...","trade":"...","customerName":null,"phones":[],"address":null,"city":null,"details":"...","nextStep":null,"visitAt":null,"status":"new","note":null}],
+{"create":[{"messageIds":["..."],"title":"...","trade":"...","customerName":null,"phones":[],"address":null,"city":null,"details":"...","nextStep":null,"visitAt":null,"status":"none","note":null}],
  "attach":[{"leadId":1,"messageIds":["..."],"status":null,"note":"...", "details":"..."}],
  "ignore":["..."]}
 כל מזהה הודעה מופיע בדיוק פעם אחת באחת הרשימות.`;
@@ -349,7 +349,7 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
       const ids = (c.messageIds ?? []).filter((i) => byId.has(i) && !touched.has(i));
       if (!ids.length || !c.title) continue;
       const t = now();
-      const status = isStatus(c.status) ? c.status : "new";
+      const status = isStatus(c.status) ? c.status : "none";
       const r = d
         .prepare(
           `INSERT INTO leads (source, title, trade, customer_name, phones, address, city, details, status, next_step, visit_at, created_at, updated_at, last_message_at)

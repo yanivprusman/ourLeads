@@ -1,6 +1,6 @@
 import "server-only";
 import { SOURCES } from "./config";
-import { STATUSES, STATUS_LABELS, getDb, type EventRow, type LeadRow, type MessageRow } from "./db";
+import { STATUSES, STATUS_LABELS, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
 import { mediaSig } from "./auth";
 
 /** The board as both clients read it: one payload, small enough to send whole. */
@@ -54,8 +54,8 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
       who: e.who,
       kind: e.kind,
       text: e.text,
-      from: e.from_status ? STATUS_LABELS[e.from_status as keyof typeof STATUS_LABELS] ?? e.from_status : null,
-      to: e.to_status ? STATUS_LABELS[e.to_status as keyof typeof STATUS_LABELS] ?? e.to_status : null,
+      from: e.from_status ? statusLabel(e.from_status) : null,
+      to: e.to_status ? statusLabel(e.to_status) : null,
     })),
   };
 }

@@ -128,14 +128,16 @@ ${describeLeads()}
 מקורות לידים: ${SOURCES.map((s) => `${s.id} = ${s.label} (${s.trades})`).join("; ")}.
 
 הבן לאיזה ליד או לידים הדברים מתייחסים — לפי שם לקוח, עיר, סוג עבודה או מספר ליד — ומה השתנה.
-דוגמאות: "דיברתי עם אורן מרעננה, לא רלוונטי" → status lost על הליד של אורן.
-"קבעתי עם אנטולי לחמישי בעשר" → status visit_scheduled, visitAt "חמישי 10:00".
-"שלחתי הצעה לשי 3500" → status quoted, note "הצעה 3,500 ₪".
+status הוא אחד משלושה מצבים, ועוד יציאה: none (עוד כלום), meeting (נקבעה פגישה, גם בלי תאריך), work (סגרנו עבודה, גם בלי תאריך), removed (הליד ירד או שהעבודה הסתיימה).
+דוגמאות: "דיברתי עם אורן מרעננה, לא רלוונטי" → status removed על הליד של אורן.
+"קבעתי עם אנטולי לחמישי בעשר" → status meeting, meetingAt של יום חמישי הקרוב 10:00.
+"קבענו פגישה עם שי" בלי מועד → status meeting בלבד.
+"שלחתי הצעה לשי 3500" → בלי status, note "הצעה 3,500 ₪".
 עסקה — שני צדדים: מה הלקוח משלם (clientPrice) ומה מקבל קבלן המשנה שמבצע (subName, subPhone, subPrice).
 "סגרנו עם הלקוח ב-8000 פלוס מע"מ" → clientPrice 8000, clientVat true. "כולל מע"מ" → clientVat false.
 "סגרנו עם יונתן 050-1234567 על 5000 פלוס מע"מ" כשיונתן הוא מי שמבצע → subName "יונתן", subPhone "0501234567", subPrice 5000, subVat true.
 אם לא ברור אם האדם הוא הלקוח או קבלן המשנה — שאל ב-reply ואל תנחש.
-סגירה עם הלקוח → status won.
+סגירה עם הלקוח → status work.
 יומן (${todayLine()}):
 - meetingAt: פגישה/ביקור אצל לקוח שעוד אין איתו חוזה, "YYYY-MM-DDTHH:MM" שעון ישראל. "חמישי בעשר" = יום חמישי הקרוב 10:00.
 - workStart/workEnd: ימי ביצוע העבודה כשיש חוזה, "YYYY-MM-DD". יום אחד → workEnd = workStart.
@@ -146,8 +148,8 @@ note: משפט קצר בגוף שלישי שמתעד מה נאמר, כולל מ�
 reply: משפט אחד או שניים בעברית, שאומר בדיוק מה עודכן (שם הליד והסטטוס החדש).
 
 התשובה במבנה:
-{"changes":[{"leadId":1,"status":"visit_scheduled","note":"...","nextStep":null,"visitAt":"..."}],
- "create":[{"source":"basis","title":"...","trade":null,"customerName":null,"phones":[],"address":null,"city":null,"details":null,"status":"new"}],
+{"changes":[{"leadId":1,"status":"meeting","note":"...","nextStep":null,"meetingAt":"2026-10-09T10:00"}],
+ "create":[{"source":"basis","title":"...","trade":null,"customerName":null,"phones":[],"address":null,"city":null,"details":null,"status":"none"}],
  "reply":"..."}`;
 }
 
@@ -207,7 +209,7 @@ export async function runCommand(said: string, who: string, leadId: number | nul
   for (const c of answer.create ?? []) {
     const src = SOURCES.find((s) => s.id === c.source) ?? null;
     if (!src || !c.title) continue;
-    const status = isStatus(c.status) ? c.status : "new";
+    const status = isStatus(c.status) ? c.status : "none";
     const t = now();
     const r = d
       .prepare(
