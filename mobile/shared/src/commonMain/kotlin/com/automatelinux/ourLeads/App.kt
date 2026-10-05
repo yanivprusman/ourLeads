@@ -360,11 +360,9 @@ private fun LeadList(
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item { header() }
         if (error != null) item { T(error, 14, color = Danger, modifier = Modifier.padding(18.dp, 12.dp)) }
-        if (fresh.isNotEmpty()) {
-            item { SectionHead("מחכים לשיחה ראשונה", "ליד חם שווה יותר") }
-            items(fresh, key = { it.id }) { LeadCard(d, it, onReply) { onOpen(it.id) } }
-            if (rest.isNotEmpty()) item { SectionHead("בטיפול", null) }
-        } else item { Spacer(Modifier.height(8.dp)) }
+        item { Spacer(Modifier.height(8.dp)) }
+        // New leads first, oldest first — no heading; the חדש tile already names them.
+        items(fresh, key = { it.id }) { LeadCard(d, it, onReply) { onOpen(it.id) } }
         items(rest, key = { it.id }) { LeadCard(d, it, onReply) { onOpen(it.id) } }
         if (leads.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -388,14 +386,6 @@ private fun Stage(label: String, n: Int, active: Boolean, dot: Color?, onClick: 
             if (dot != null) { Box(Modifier.size(6.dp).clip(CircleShape).background(dot)); Spacer(Modifier.width(4.dp)) }
             T(label, 12, color = fg, maxLines = 1)
         }
-    }
-}
-
-@Composable
-private fun SectionHead(title: String, hint: String?) {
-    Row(Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
-        T(title, 13, FontWeight.Bold, Ink2)
-        hint?.let { Spacer(Modifier.width(8.dp)); T(it, 12, color = Muted) }
     }
 }
 

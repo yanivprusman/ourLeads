@@ -191,11 +191,9 @@ export default function Board() {
           <>
         {fresh.length > 0 && (
           <>
-            <SectionHead title="מחכים לשיחה ראשונה" hint="כמה זמן כל ליד מחכה — ליד חם שווה יותר" />
             {fresh.map((l) => (
               <LeadCard key={l.id} lead={l} data={data} onOpen={() => setOpenId(l.id)} />
             ))}
-            {rest.length > 0 && <SectionHead title="בטיפול" />}
           </>
         )}
         {rest.map((l) => (
@@ -260,15 +258,6 @@ function Stage({
         {label}
       </div>
     </button>
-  );
-}
-
-function SectionHead({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <div className="flex items-baseline gap-2 pt-2">
-      <h2 className="text-[13px] font-bold text-ink-2 tracking-wide">{title}</h2>
-      {hint && <span className="text-xs text-muted">{hint}</span>}
-    </div>
   );
 }
 
