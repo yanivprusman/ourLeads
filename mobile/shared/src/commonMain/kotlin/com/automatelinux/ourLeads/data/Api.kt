@@ -86,14 +86,16 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
-    suspend fun sayText(text: String): Result<CommandReply> {
-        val body = JsonObject(mapOf("text" to JsonPrimitive(text))).toString().encodeToByteArray()
+    /** A sentence about one lead — spoken on its card, so only that lead changes. */
+    suspend fun sayText(leadId: Int, text: String): Result<CommandReply> {
+        val body = JsonObject(mapOf("text" to JsonPrimitive(text), "leadId" to JsonPrimitive(leadId))).toString().encodeToByteArray()
         return command(httpRequest("POST", "$base/api/command", token, body, "application/json; charset=utf-8"))
     }
 
-    suspend fun sayAudio(audio: ByteArray, fileName: String, mime: String): Result<CommandReply> {
+    suspend fun sayAudio(leadId: Int, audio: ByteArray, fileName: String, mime: String): Result<CommandReply> {
         val boundary = "----ourleads${audio.size}x${audio.hashCode()}"
-        val head = "--$boundary\r\nContent-Disposition: form-data; name=\"audio\"; filename=\"$fileName\"\r\n" +
+        val head = "--$boundary\r\nContent-Disposition: form-data; name=\"leadId\"\r\n\r\n$leadId\r\n" +
+            "--$boundary\r\nContent-Disposition: form-data; name=\"audio\"; filename=\"$fileName\"\r\n" +
             "Content-Type: $mime\r\n\r\n"
         val tail = "\r\n--$boundary--\r\n"
         val body = head.encodeToByteArray() + audio + tail.encodeToByteArray()

@@ -114,10 +114,13 @@ const COMMAND_SCHEMA = {
   required: ["changes", "create", "reply"],
 };
 
-function buildPrompt(said: string, who: string): string {
+function buildPrompt(said: string, who: string, lead: { id: number; title: string } | null): string {
+  const about = lead
+    ? `\nהדברים נאמרו על הכרטיס של ליד #${lead.id} (${lead.title}) — כל השינויים הם לליד הזה בלבד, leadId ${lead.id}, ואין ליצור לידים חדשים (create ריק).\n`
+    : "";
   return `אתה מנהל לוח לידים לשותפות עבודות גובה. ${who} אמר/ה עכשיו (תמלול של הקלטה, ייתכנו שגיאות שמיעה):
 """${said}"""
-
+${about}
 לידים פתוחים:
 ${describeLeads()}
 
@@ -148,19 +151,26 @@ reply: משפט אחד או שניים בעברית, שאומר בדיוק מה 
  "reply":"..."}`;
 }
 
-export async function runCommand(said: string, who: string): Promise<CommandResult> {
+export async function runCommand(said: string, who: string, leadId: number | null = null): Promise<CommandResult> {
   const text = said.trim();
   if (!text) throw new Error("nothing was said");
   const d = getDb();
+  const lead = leadId == null ? null : (getLead(leadId) ?? null);
+  if (leadId != null && !lead) throw new Error(`lead ${leadId} not found`);
   let answer: Answer;
   try {
-    answer = await askJson<Answer>(buildPrompt(text, who), COMMAND_SCHEMA);
+    answer = await askJson<Answer>(buildPrompt(text, who, lead), COMMAND_SCHEMA);
   } catch (e) {
     d.prepare("INSERT INTO commands (at, who, said, error) VALUES (?, ?, ?, ?)").run(now(), who, text, (e as Error).message);
     throw e;
   }
 
   const applied: AppliedChange[] = [];
+  // Spoken on one lead's card: nothing else may change, whatever the model returned.
+  if (lead) {
+    answer.changes = (answer.changes ?? []).filter((c) => c.leadId === lead.id);
+    answer.create = [];
+  }
   for (const c of answer.changes ?? []) {
     const before = getLead(c.leadId);
     if (!before) continue;

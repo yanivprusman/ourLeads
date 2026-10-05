@@ -13,15 +13,18 @@ export const dynamic = "force-dynamic";
 /**
  * "Say the status." Either a recording (multipart field `audio`) — transcribed
  * here, so the phone and the browser need no speech engine of their own — or
- * typed text (JSON `{ text }`).
+ * typed text (JSON `{ text }`). `leadId` (form field or JSON) says the
+ * sentence is about that one lead — it was spoken on that lead's card.
  */
 export async function POST(request: Request) {
   return asUser(request, async (user) => {
     let said: string;
+    let leadId: number | null = null;
     const type = request.headers.get("content-type") ?? "";
     if (type.startsWith("multipart/form-data")) {
       const form = await request.formData();
       const audio = form.get("audio");
+      leadId = Number(form.get("leadId")) || null;
       if (!(audio instanceof Blob) || audio.size === 0)
         return NextResponse.json({ error: "no recording" }, { status: 400 });
       const dir = path.join(dataDir(), "commands");
@@ -36,9 +39,10 @@ export async function POST(request: Request) {
       }
       if (!said.trim()) return NextResponse.json({ error: "לא נשמע כלום בהקלטה" }, { status: 422 });
     } else {
-      const body = (await request.json()) as { text?: string };
+      const body = (await request.json()) as { text?: string; leadId?: number };
       said = String(body.text ?? "");
+      leadId = Number(body.leadId) || null;
     }
-    return NextResponse.json(await runCommand(said, user.name));
+    return NextResponse.json(await runCommand(said, user.name, leadId));
   });
 }

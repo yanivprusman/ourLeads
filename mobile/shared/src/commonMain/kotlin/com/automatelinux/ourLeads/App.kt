@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import com.automatelinux.ourLeads.data.*
 import com.automatelinux.ourLeads.platform.PlatformBackHandler
 import com.automatelinux.ourLeads.platform.decodeImage
+import com.automatelinux.ourLeads.platform.VoiceRecorder
 import com.automatelinux.ourLeads.platform.rememberVoiceRecorder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -247,14 +248,13 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, mode, dated, onView = { view = it }, onSource = { source = it }, onDated = { dated = it }, onMode = { mode = it }, onOpen = { openId = it })
-            VoiceDock(
-                reply = reply,
-                onReply = { reply = it; tick++ },
-                onOpenLead = { openId = it },
-                onDismiss = { reply = null },
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
+            LeadList(d, error, view, source, mode, dated, onView = { view = it }, onSource = { source = it }, onDated = { dated = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; tick++ })
+            AnimatedVisibility(
+                reply != null, Modifier.align(Alignment.BottomCenter),
+                enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut(),
+            ) {
+                reply?.let { ReplyBubble(it, { reply = null }, Modifier.navigationBarsPadding().padding(start = 14.dp, end = 14.dp, bottom = LocalDockBottom.current)) }
+            }
         }
         StatusScrim()
         AnimatedVisibility(
@@ -272,7 +272,7 @@ private fun BoardScreen() {
 @Composable
 private fun LeadList(
     d: BoardData, error: String?, view: String, source: String, mode: String, dated: String,
-    onView: (String) -> Unit, onSource: (String) -> Unit, onDated: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
+    onView: (String) -> Unit, onSource: (String) -> Unit, onDated: (String) -> Unit, onReply: (CommandReply) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
     val inSource = d.leads.filter { source == "all" || it.source == source }
     val leads = inSource.filter { dated == "any" || datedOf(it) == dated }.filter { when (view) { "all" -> true; "open" -> it.status !in CLOSED; else -> it.status == view } }
@@ -357,15 +357,15 @@ private fun LeadList(
         CalendarScreen(d, inSource, header, onOpen)
         return
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 150.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item { header() }
         if (error != null) item { T(error, 14, color = Danger, modifier = Modifier.padding(18.dp, 12.dp)) }
         if (fresh.isNotEmpty()) {
             item { SectionHead("מחכים לשיחה ראשונה", "ליד חם שווה יותר") }
-            items(fresh, key = { it.id }) { LeadCard(d, it) { onOpen(it.id) } }
+            items(fresh, key = { it.id }) { LeadCard(d, it, onReply) { onOpen(it.id) } }
             if (rest.isNotEmpty()) item { SectionHead("בטיפול", null) }
         } else item { Spacer(Modifier.height(8.dp)) }
-        items(rest, key = { it.id }) { LeadCard(d, it) { onOpen(it.id) } }
+        items(rest, key = { it.id }) { LeadCard(d, it, onReply) { onOpen(it.id) } }
         if (leads.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 LocalMark.current(Modifier.size(52.dp).alpha(.3f))
@@ -415,7 +415,7 @@ private fun Pill(text: String, bg: Color, fg: Color, strike: Boolean = false) =
     T(text, 12, FontWeight.SemiBold, fg, Modifier.clip(CircleShape).background(bg).padding(horizontal = 8.dp, vertical = 2.dp), strike = strike)
 
 @Composable
-private fun LeadCard(d: BoardData, l: Lead, onClick: () -> Unit) {
+private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onClick: () -> Unit) {
     val uri = LocalUriHandler.current
     val t = tone(l.status)
     val thumb = l.messages.firstOrNull { it.mediaType == "image" && it.mediaUrl != null }?.mediaUrl
@@ -460,6 +460,8 @@ private fun LeadCard(d: BoardData, l: Lead, onClick: () -> Unit) {
                 QuickAction(Icons.AutoMirrored.Filled.Chat, "וואטסאפ", Israel, Modifier.weight(1f)) { uri.openUri("https://wa.me/${intlPhone(phone)}") }
             }
         }
+        HorizontalDivider(color = Line)
+        CardTalk(l, onReply)
     }
 }
 
@@ -503,6 +505,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     var note by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var photo by remember { mutableStateOf<String?>(null) }
+    var said by remember(l.id) { mutableStateOf<CommandReply?>(null) }
     val src = d.sources.firstOrNull { it.id == l.source }
     val partner = src?.partner?.substringBefore(" ") ?: "שותף"
     val place = listOfNotNull(l.address, l.city).joinToString(", ")
@@ -525,7 +528,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     val timeline = (l.messages.filter { it.mediaType != "image" }.map { Item.M(it) } + l.events.map { Item.E(it) }).sortedBy { it.at }
 
     Box(Modifier.fillMaxSize().background(Paper)) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 48.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 150.dp)) {
             item {
                 Box(Modifier.fillMaxWidth().background(Band)) {
                     if (photos.isNotEmpty()) {
@@ -697,6 +700,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
             }
         }
         StatusScrim()
+        VoiceDock(l, said, onReply = { said = it; onChanged() }, onDismiss = { said = null }, modifier = Modifier.align(Alignment.BottomCenter))
         if (photo != null) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .94f)).clickable { photo = null }, contentAlignment = Alignment.Center) {
                 RemoteImage(photo!!, Modifier.fillMaxWidth(), crop = false)
@@ -770,69 +774,132 @@ private fun TimelineEvent(e: LeadEvent) {
     }
 }
 
-// ── Voice dock ───────────────────────────────────────────────────────────────
+// ── Voice ────────────────────────────────────────────────────────────────────
+// What was said is always about ONE lead: it is spoken on that lead's card or
+// inside that lead, and the server changes nothing else.
+
+@Stable
+private class TalkState(val recorder: VoiceRecorder) {
+    var recording by mutableStateOf(false)
+    var working by mutableStateOf(false)
+    var elapsed by mutableStateOf(0)
+    var error by mutableStateOf<String?>(null)
+}
+
+/** Hold-to-talk about one lead: records while pressed, sends on release. Returns the state and the press modifier. */
 @Composable
-private fun VoiceDock(
-    reply: CommandReply?,
-    onReply: (CommandReply) -> Unit,
-    onOpenLead: (Int) -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier,
-) {
+private fun rememberTalk(leadId: Int, onReply: (CommandReply) -> Unit): Pair<TalkState, Modifier> {
     val api = LocalApi.current
-    val recorder = rememberVoiceRecorder()
     val scope = rememberCoroutineScope()
-    var recording by remember { mutableStateOf(false) }
-    var working by remember { mutableStateOf(false) }
+    val recorder = rememberVoiceRecorder()
+    val st = remember(recorder) { TalkState(recorder) }
+    val reply by rememberUpdatedState(onReply)
+    var startedAt by remember { mutableStateOf(0L) }
+    LaunchedEffect(st.recording) {
+        while (st.recording) { st.elapsed = ((Clock.System.now().toEpochMilliseconds() - startedAt) / 1000).toInt(); delay(250) }
+    }
+    val press = Modifier.pointerInput(st.working, leadId) {
+        if (st.working) return@pointerInput
+        detectTapGestures(onPress = {
+            st.error = null
+            if (!recorder.start()) return@detectTapGestures
+            startedAt = Clock.System.now().toEpochMilliseconds()
+            st.elapsed = 0
+            st.recording = true
+            tryAwaitRelease()
+            st.recording = false
+            val rec = recorder.stop()
+            if (rec == null) { st.error = "החזיקו את הכפתור לאורך כל המשפט"; return@detectTapGestures }
+            st.working = true
+            scope.launch {
+                when (val r = api.sayAudio(leadId, rec.bytes, rec.fileName, rec.mime)) {
+                    is Result.Ok -> reply(r.value)
+                    is Result.Err -> st.error = r.message
+                }
+                st.working = false
+            }
+        })
+    }
+    return st to press
+}
+
+@Composable
+private fun ReplyBubble(r: CommandReply, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().shadow(16.dp, RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(20.dp)).background(Ink).padding(16.dp),
+    ) {
+        Row {
+            Column(Modifier.weight(1f)) {
+                T("״${r.said}״", 13, color = Color.White.copy(alpha = .55f))
+                T(r.reply, 15, FontWeight.SemiBold, Color.White, Modifier.padding(top = 4.dp), lineHeight = 21)
+            }
+            Icon(Icons.Default.Close, "סגירה", tint = Color.White.copy(alpha = .5f), modifier = Modifier.size(22.dp).clickable(onClick = onDismiss))
+        }
+        r.changes.forEach { c ->
+            Row(Modifier.padding(top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                T(c.title, 13, color = Color.White, maxLines = 1)
+                c.to?.let { T("  ← $it", 13, FontWeight.Bold, Amber) }
+            }
+        }
+    }
+}
+
+/** The strip at the bottom of a lead card: hold it and say what happened with this lead. */
+@Composable
+private fun CardTalk(l: Lead, onReply: (CommandReply) -> Unit) {
+    val (st, press) = rememberTalk(l.id, onReply)
+    Row(
+        Modifier.fillMaxWidth().background(if (st.recording) Color(0xFFFDE8E8) else Color(0xFFF4F8FB)).then(press)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(30.dp).clip(CircleShape).background(if (st.recording) Color(0xFFDC2626) else Harbour), contentAlignment = Alignment.Center) {
+            if (st.working) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+            else Icon(Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        when {
+            st.recording -> { T("מקליט 0:${two(st.elapsed)}", 14, FontWeight.SemiBold, Color(0xFFB91C1C)); T("  שחררו לשליחה", 12, color = Muted) }
+            st.working -> T("מבין ומעדכן…", 14, color = Ink2)
+            st.error != null -> T(st.error!!, 13, color = Danger, maxLines = 2)
+            st.recorder.permissionDenied -> T("צריך הרשאת מיקרופון", 13, color = Danger)
+            else -> { T("ספרו לי מה קרה", 14, FontWeight.SemiBold, Harbour); T("  החזיקו ודברו", 12, color = Muted) }
+        }
+    }
+}
+
+/** Inside a lead: the same hold-to-talk, plus typing, about this lead only. */
+@Composable
+private fun VoiceDock(l: Lead, reply: CommandReply?, onReply: (CommandReply) -> Unit, onDismiss: () -> Unit, modifier: Modifier) {
+    val api = LocalApi.current
+    val scope = rememberCoroutineScope()
+    val (st, press) = rememberTalk(l.id, onReply)
     var typing by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    var startedAt by remember { mutableStateOf(0L) }
-    var elapsed by remember { mutableStateOf(0) }
+    val who = l.customerName ?: l.title
 
-    LaunchedEffect(recording) {
-        while (recording) { elapsed = ((Clock.System.now().toEpochMilliseconds() - startedAt) / 1000).toInt(); delay(250) }
-    }
-
-    fun handle(r: Result<CommandReply>) {
-        when (r) {
-            is Result.Ok -> { onReply(r.value); text = ""; typing = false; error = null }
-            is Result.Err -> error = r.message
+    fun send() {
+        if (text.isBlank() || st.working) return
+        st.working = true
+        scope.launch {
+            when (val r = api.sayText(l.id, text)) {
+                is Result.Ok -> { onReply(r.value); text = ""; typing = false; st.error = null }
+                is Result.Err -> st.error = r.message
+            }
+            st.working = false
         }
-        working = false
     }
 
     Column(modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = LocalDockBottom.current)) {
         AnimatedVisibility(reply != null, enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut()) {
-            reply?.let { r ->
-                Column(
-                    Modifier.padding(bottom = 8.dp).fillMaxWidth().shadow(16.dp, RoundedCornerShape(20.dp))
-                        .clip(RoundedCornerShape(20.dp)).background(Ink).padding(16.dp),
-                ) {
-                    Row {
-                        Column(Modifier.weight(1f)) {
-                            T("״${r.said}״", 13, color = Color.White.copy(alpha = .55f))
-                            T(r.reply, 15, FontWeight.SemiBold, Color.White, Modifier.padding(top = 4.dp), lineHeight = 21)
-                        }
-                        Icon(Icons.Default.Close, "סגירה", tint = Color.White.copy(alpha = .5f), modifier = Modifier.size(22.dp).clickable(onClick = onDismiss))
-                    }
-                    r.changes.forEach { c ->
-                        Row(
-                            Modifier.padding(top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f))
-                                .clickable { onOpenLead(c.leadId) }.padding(horizontal = 12.dp, vertical = 6.dp),
-                        ) {
-                            T(c.title, 13, color = Color.White, maxLines = 1)
-                            c.to?.let { T("  ← $it", 13, FontWeight.Bold, Amber) }
-                        }
-                    }
-                }
-            }
+            reply?.let { ReplyBubble(it, onDismiss, Modifier.padding(bottom = 8.dp)) }
         }
-        error?.let {
+        st.error?.let {
             T(it, 13, color = Danger, modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFFFDE8E8)).padding(horizontal = 12.dp, vertical = 8.dp))
         }
-        if (recorder.permissionDenied) T("צריך הרשאת מיקרופון כדי לדבר עם הלוח", 13, color = Danger, modifier = Modifier.padding(bottom = 8.dp))
+        if (st.recorder.permissionDenied) T("צריך הרשאת מיקרופון כדי לדבר עם הלוח", 13, color = Danger, modifier = Modifier.padding(bottom = 8.dp))
 
         Row(
             Modifier.fillMaxWidth().shadow(18.dp, RoundedCornerShape(32.dp), spotColor = Ink.copy(alpha = .35f))
@@ -842,7 +909,7 @@ private fun VoiceDock(
             if (!typing) {
                 // The mic sits under the right thumb (start side in Hebrew).
                 Box(contentAlignment = Alignment.Center) {
-                    if (recording) {
+                    if (st.recording) {
                         val inf = rememberInfiniteTransition()
                         listOf(0, 700).forEach { offset ->
                             val s by inf.animateFloat(1f, 2.1f, infiniteRepeatable(tween(1400, easing = LinearOutSlowInEasing), initialStartOffset = StartOffset(offset)))
@@ -850,46 +917,31 @@ private fun VoiceDock(
                             Box(Modifier.size(64.dp).scale(s).alpha(a).clip(CircleShape).background(Color(0xFFDC2626)))
                         }
                     }
-                    val press by animateFloatAsState(if (recording) 1.1f else 1f)
+                    val scaleBy by animateFloatAsState(if (st.recording) 1.1f else 1f)
                     Box(
-                        Modifier.size(64.dp).scale(press).clip(CircleShape)
+                        Modifier.size(64.dp).scale(scaleBy).clip(CircleShape)
                             .background(
-                                if (recording) SolidColor(Color(0xFFDC2626))
+                                if (st.recording) SolidColor(Color(0xFFDC2626))
                                 else Brush.radialGradient(listOf(Color(0xFF2A8BC0), Harbour), center = Offset(40f, 30f), radius = 180f),
                             )
-                            .pointerInput(working) {
-                                if (working) return@pointerInput
-                                detectTapGestures(onPress = {
-                                    error = null
-                                    if (!recorder.start()) return@detectTapGestures
-                                    startedAt = Clock.System.now().toEpochMilliseconds()
-                                    elapsed = 0
-                                    recording = true
-                                    tryAwaitRelease()
-                                    recording = false
-                                    val rec = recorder.stop()
-                                    if (rec == null) { error = "החזיקו את הכפתור לאורך כל המשפט"; return@detectTapGestures }
-                                    working = true
-                                    scope.launch { handle(api.sayAudio(rec.bytes, rec.fileName, rec.mime)) }
-                                })
-                            },
+                            .then(press),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (working) CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(26.dp))
+                        if (st.working) CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(26.dp))
                         else Icon(Icons.Default.Mic, "החזיקו ודברו", tint = Color.White, modifier = Modifier.size(30.dp))
                     }
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     when {
-                        recording -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        st.recording -> Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFDC2626)))
-                            T("  מקליט 0:${two(elapsed)}", 16, FontWeight.SemiBold)
+                            T("  מקליט 0:${two(st.elapsed)}", 16, FontWeight.SemiBold)
                             T("  שחררו לשליחה", 13, color = Muted)
                         }
-                        working -> T("מבין ומעדכן…", 15, color = Ink2)
+                        st.working -> T("מבין ומעדכן…", 15, color = Ink2)
                         else -> {
                             T("ספרו לי מה קרה", 16, FontWeight.SemiBold)
-                            T("החזיקו ודברו: ״דיברתי עם שי, שולח הצעה מחר״", 12, color = Muted, maxLines = 1)
+                            T("עם $who · החזיקו ודברו", 12, color = Muted, maxLines = 1)
                         }
                     }
                 }
@@ -898,20 +950,20 @@ private fun VoiceDock(
                     text, { text = it },
                     Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 14.dp),
                     textStyle = LocalTextStyle.current.copy(fontSize = 16.sp),
-                    enabled = !working,
+                    enabled = !st.working,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { if (text.isNotBlank()) { working = true; scope.launch { handle(api.sayText(text)) } } }),
-                    decorationBox = { inner -> if (text.isEmpty()) T("״קבעתי עם אורן לחמישי בעשר״", 16, color = Muted); inner() },
+                    keyboardActions = KeyboardActions(onSend = { send() }),
+                    decorationBox = { inner -> if (text.isEmpty()) T("״קבענו לחמישי בעשר״", 16, color = Muted); inner() },
                 )
                 T(
-                    if (working) "…" else "עדכן", 15, FontWeight.SemiBold, Color.White,
-                    Modifier.clip(CircleShape).background(if (text.isNotBlank() && !working) Harbour else Harbour.copy(alpha = .35f))
-                        .clickable(enabled = text.isNotBlank() && !working) { working = true; scope.launch { handle(api.sayText(text)) } }
+                    if (st.working) "…" else "עדכן", 15, FontWeight.SemiBold, Color.White,
+                    Modifier.clip(CircleShape).background(if (text.isNotBlank() && !st.working) Harbour else Harbour.copy(alpha = .35f))
+                        .clickable(enabled = text.isNotBlank() && !st.working) { send() }
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                 )
             }
             Box(
-                Modifier.padding(start = 6.dp).size(44.dp).clip(CircleShape).clickable(enabled = !working && !recording) { typing = !typing },
+                Modifier.padding(start = 6.dp).size(44.dp).clip(CircleShape).clickable(enabled = !st.working && !st.recording) { typing = !typing },
                 contentAlignment = Alignment.Center,
             ) { Icon(if (typing) Icons.Default.Mic else Icons.Default.Keyboard, if (typing) "דיבור" else "הקלדה", tint = Muted) }
         }
@@ -1145,7 +1197,7 @@ private fun CalendarScreen(d: BoardData, leads: List<Lead>, header: @Composable 
     val upcoming = byDay.entries.filter { it.key >= today }.sortedBy { it.key }
         .flatMap { (k, v) -> v.filter { it is CalEntry.Meeting || (it as CalEntry.Work).first }.map { k to it } }.take(6)
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 150.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item { header() }
         item {
             Surface(Modifier.padding(16.dp).fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, Line)) {
