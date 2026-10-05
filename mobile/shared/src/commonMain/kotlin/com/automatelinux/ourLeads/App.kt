@@ -503,6 +503,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     var error by remember { mutableStateOf<String?>(null) }
     var photo by remember { mutableStateOf<String?>(null) }
     var said by remember(l.id) { mutableStateOf<CommandReply?>(null) }
+    var talkError by remember(l.id) { mutableStateOf<String?>(null) }
     val src = d.sources.firstOrNull { it.id == l.source }
     val partner = src?.partner?.substringBefore(" ") ?: "שותף"
     val place = listOfNotNull(l.address, l.city).joinToString(", ")
@@ -525,7 +526,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     val timeline = (l.messages.filter { it.mediaType != "image" }.map { Item.M(it) } + l.events.map { Item.E(it) }).sortedBy { it.at }
 
     Box(Modifier.fillMaxSize().background(Paper)) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 150.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 48.dp)) {
             item {
                 Box(Modifier.fillMaxWidth().background(Band)) {
                     if (photos.isNotEmpty()) {
@@ -560,13 +561,20 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                 }
             }
             item {
-                Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val p = l.phones.firstOrNull()
+                    CardTalk(l, onReply = { said = it; talkError = null; onChanged() }, onError = { talkError = it; said = null })
                     BigAction(Icons.Default.Call, "התקשר", Harbour, p != null, Modifier.weight(1f)) { uri.openUri("tel:$p") }
                     BigAction(Icons.AutoMirrored.Filled.Chat, "וואטסאפ", Israel, p != null, Modifier.weight(1f)) { uri.openUri("https://wa.me/${intlPhone(p!!)}") }
                     BigAction(Icons.Default.Navigation, "נווט", Color(0xFF2A6FD6), place.isNotEmpty(), Modifier.weight(1f)) {
                         uri.openUri("https://waze.com/ul?q=${place.encodeUrl()}&navigate=yes")
                     }
+                }
+                said?.let { ReplyBubble(it, { said = null }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) }
+                talkError?.let {
+                    T(it, 14, FontWeight.SemiBold, Danger, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp)).background(Color(0xFFFDE8E8)).clickable { talkError = null }
+                        .padding(horizontal = 16.dp, vertical = 12.dp))
                 }
                 if (l.phones.size > 1) FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     l.phones.drop(1).forEach { p ->
@@ -697,7 +705,6 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
             }
         }
         StatusScrim()
-        VoiceDock(l, said, onReply = { said = it; onChanged() }, onDismiss = { said = null }, modifier = Modifier.align(Alignment.BottomCenter))
         if (photo != null) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .94f)).clickable { photo = null }, contentAlignment = Alignment.Center) {
                 RemoteImage(photo!!, Modifier.fillMaxWidth(), crop = false)
@@ -842,7 +849,7 @@ private fun ReplyBubble(r: CommandReply, onDismiss: () -> Unit, modifier: Modifi
     }
 }
 
-/** The mic on a lead card: hold it and say what happened with this lead. Red while recording, spinner while it works. */
+/** The mic, on a lead card and inside a lead: hold it and say what happened with this lead. Red while recording, spinner while it works. */
 @Composable
 private fun CardTalk(l: Lead, onReply: (CommandReply) -> Unit, onError: (String) -> Unit) {
     val (st, press) = rememberTalk(l.id, onReply)
@@ -869,108 +876,6 @@ private fun CardTalk(l: Lead, onReply: (CommandReply) -> Unit, onError: (String)
         }
     }
 }
-
-/** Inside a lead: the same hold-to-talk, plus typing, about this lead only. */
-@Composable
-private fun VoiceDock(l: Lead, reply: CommandReply?, onReply: (CommandReply) -> Unit, onDismiss: () -> Unit, modifier: Modifier) {
-    val api = LocalApi.current
-    val scope = rememberCoroutineScope()
-    val (st, press) = rememberTalk(l.id, onReply)
-    var typing by remember { mutableStateOf(false) }
-    var text by remember { mutableStateOf("") }
-    val who = l.customerName ?: l.title
-
-    fun send() {
-        if (text.isBlank() || st.working) return
-        st.working = true
-        scope.launch {
-            when (val r = api.sayText(l.id, text)) {
-                is Result.Ok -> { onReply(r.value); text = ""; typing = false; st.error = null }
-                is Result.Err -> st.error = r.message
-            }
-            st.working = false
-        }
-    }
-
-    Column(modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = LocalDockBottom.current)) {
-        AnimatedVisibility(reply != null, enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut()) {
-            reply?.let { ReplyBubble(it, onDismiss, Modifier.padding(bottom = 8.dp)) }
-        }
-        st.error?.let {
-            T(it, 13, color = Danger, modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFFDE8E8)).padding(horizontal = 12.dp, vertical = 8.dp))
-        }
-        if (st.recorder.permissionDenied) T("צריך הרשאת מיקרופון כדי לדבר עם הלוח", 13, color = Danger, modifier = Modifier.padding(bottom = 8.dp))
-
-        Row(
-            Modifier.fillMaxWidth().shadow(18.dp, RoundedCornerShape(32.dp), spotColor = Ink.copy(alpha = .35f))
-                .clip(RoundedCornerShape(32.dp)).background(Color.White).padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (!typing) {
-                // The mic sits under the right thumb (start side in Hebrew).
-                Box(contentAlignment = Alignment.Center) {
-                    if (st.recording) {
-                        val inf = rememberInfiniteTransition()
-                        listOf(0, 700).forEach { offset ->
-                            val s by inf.animateFloat(1f, 2.1f, infiniteRepeatable(tween(1400, easing = LinearOutSlowInEasing), initialStartOffset = StartOffset(offset)))
-                            val a by inf.animateFloat(.5f, 0f, infiniteRepeatable(tween(1400, easing = LinearOutSlowInEasing), initialStartOffset = StartOffset(offset)))
-                            Box(Modifier.size(64.dp).scale(s).alpha(a).clip(CircleShape).background(Color(0xFFDC2626)))
-                        }
-                    }
-                    val scaleBy by animateFloatAsState(if (st.recording) 1.1f else 1f)
-                    Box(
-                        Modifier.size(64.dp).scale(scaleBy).clip(CircleShape)
-                            .background(
-                                if (st.recording) SolidColor(Color(0xFFDC2626))
-                                else Brush.radialGradient(listOf(Color(0xFF2A8BC0), Harbour), center = Offset(40f, 30f), radius = 180f),
-                            )
-                            .then(press),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (st.working) CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(26.dp))
-                        else Icon(Icons.Default.Mic, "החזיקו ודברו", tint = Color.White, modifier = Modifier.size(30.dp))
-                    }
-                }
-                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    when {
-                        st.recording -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFDC2626)))
-                            T("  מקליט 0:${two(st.elapsed)}", 16, FontWeight.SemiBold)
-                            T("  שחררו לשליחה", 13, color = Muted)
-                        }
-                        st.working -> T("מבין ומעדכן…", 15, color = Ink2)
-                        else -> {
-                            T("ספרו לי מה קרה", 16, FontWeight.SemiBold)
-                            T("עם $who · החזיקו ודברו", 12, color = Muted, maxLines = 1)
-                        }
-                    }
-                }
-            } else {
-                BasicTextField(
-                    text, { text = it },
-                    Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 14.dp),
-                    textStyle = LocalTextStyle.current.copy(fontSize = 16.sp),
-                    enabled = !st.working,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { send() }),
-                    decorationBox = { inner -> if (text.isEmpty()) T("״קבענו לחמישי בעשר״", 16, color = Muted); inner() },
-                )
-                T(
-                    if (st.working) "…" else "עדכן", 15, FontWeight.SemiBold, Color.White,
-                    Modifier.clip(CircleShape).background(if (text.isNotBlank() && !st.working) Harbour else Harbour.copy(alpha = .35f))
-                        .clickable(enabled = text.isNotBlank() && !st.working) { send() }
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                )
-            }
-            Box(
-                Modifier.padding(start = 6.dp).size(44.dp).clip(CircleShape).clickable(enabled = !st.working && !st.recording) { typing = !typing },
-                contentAlignment = Alignment.Center,
-            ) { Icon(if (typing) Icons.Default.Mic else Icons.Default.Keyboard, if (typing) "דיבור" else "הקלדה", tint = Muted) }
-        }
-    }
-}
-
 
 // ── Deal ─────────────────────────────────────────────────────────────────────
 private const val VAT = 0.18
