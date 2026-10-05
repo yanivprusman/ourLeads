@@ -78,6 +78,14 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
+    /** Put a lead on the calendar, or take it off (null). Only the keys given are changed. */
+    suspend fun setSchedule(leadId: Int, fields: Map<String, String?>): Result<Unit> {
+        val body = JsonObject(fields.mapValues { (_, v) -> v?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull })
+            .toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/leads/$leadId", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     suspend fun sayText(text: String): Result<CommandReply> {
         val body = JsonObject(mapOf("text" to JsonPrimitive(text))).toString().encodeToByteArray()
         return command(httpRequest("POST", "$base/api/command", token, body, "application/json; charset=utf-8"))

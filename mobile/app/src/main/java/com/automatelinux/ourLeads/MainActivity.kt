@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.draw.scale
 import com.automatelinux.ourLeads.ui.feedback.FeedbackHost
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
                     baseUrl = BuildConfig.API_BASE_URL,
                     token = BuildConfig.API_TOKEN,
                     fontFamily = Heebo,
+                    dockBottom = if (BuildConfig.FLAVOR == "dev") 58.dp else 12.dp,
                     mark = { modifier ->
                         // The launcher icon itself: same two layers, cropped like a launcher does.
                         Box(modifier.clip(RoundedCornerShape(24))) {

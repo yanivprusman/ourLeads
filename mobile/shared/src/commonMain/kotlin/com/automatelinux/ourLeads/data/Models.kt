@@ -41,6 +41,11 @@ data class Lead(
     val statusLabel: String,
     val nextStep: String? = null,
     val visitAt: String? = null,
+    /** "2026-10-09T10:00" Israel time — a meeting before there is a contract (green). */
+    val meetingAt: String? = null,
+    /** "2026-10-12" — working days once there is a contract (red). */
+    val workStart: String? = null,
+    val workEnd: String? = null,
     val deal: Deal = Deal(),
     val createdAt: String,
     val updatedAt: String,

@@ -71,6 +71,9 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.plus
+import kotlinx.datetime.minus
 
 // ── Tokens: the icon's palette ───────────────────────────────────────────────
 private val Ink = Color(0xFF0D2A43)
@@ -113,6 +116,7 @@ private fun partnerColor(src: String) = if (src == "israel") Israel else Basis
 private fun partnerInitial(src: String) = if (src == "israel") "י" else "ב"
 
 private val LocalApi = staticCompositionLocalOf<OurLeadsApi> { error("no api") }
+private val LocalDockBottom = staticCompositionLocalOf { 12.dp }
 private val LocalMark = staticCompositionLocalOf<@Composable (Modifier) -> Unit> { { } }
 
 // ── Small helpers ────────────────────────────────────────────────────────────
@@ -154,7 +158,14 @@ private fun String.encodeUrl(): String = buildString {
 
 // ── Entry ────────────────────────────────────────────────────────────────────
 @Composable
-fun App(baseUrl: String, token: String, fontFamily: FontFamily, mark: @Composable (Modifier) -> Unit) {
+fun App(
+    baseUrl: String,
+    token: String,
+    fontFamily: FontFamily,
+    mark: @Composable (Modifier) -> Unit,
+    /** Room under the voice dock: dev builds pin the feedback-lib button in that corner. */
+    dockBottom: Dp = 12.dp,
+) {
     val api = remember { OurLeadsApi(baseUrl, token) }
     val base = MaterialTheme.typography
     val type = remember(fontFamily) {
@@ -180,6 +191,7 @@ fun App(baseUrl: String, token: String, fontFamily: FontFamily, mark: @Composabl
             LocalLayoutDirection provides LayoutDirection.Rtl,
             LocalApi provides api,
             LocalMark provides mark,
+            LocalDockBottom provides dockBottom,
             LocalTextStyle provides TextStyle(fontFamily = fontFamily, color = Ink),
         ) {
             Box(Modifier.fillMaxSize().background(Paper)) { BoardScreen() }
@@ -217,6 +229,7 @@ private fun BoardScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var view by remember { mutableStateOf("open") }
     var source by remember { mutableStateOf("all") }
+    var mode by remember { mutableStateOf("leads") }
     var openId by remember { mutableStateOf<Int?>(null) }
     var reply by remember { mutableStateOf<CommandReply?>(null) }
     var tick by remember { mutableStateOf(0) }
@@ -244,7 +257,7 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, onView = { view = it }, onSource = { source = it }, onOpen = { openId = it })
+            LeadList(d, error, view, source, mode, onView = { view = it }, onSource = { source = it }, onMode = { mode = it }, onOpen = { openId = it })
             VoiceDock(
                 reply = reply,
                 onReply = { reply = it; tick++ },
@@ -268,8 +281,8 @@ private fun BoardScreen() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LeadList(
-    d: BoardData, error: String?, view: String, source: String,
-    onView: (String) -> Unit, onSource: (String) -> Unit, onOpen: (Int) -> Unit,
+    d: BoardData, error: String?, view: String, source: String, mode: String,
+    onView: (String) -> Unit, onSource: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
     val inSource = d.leads.filter { source == "all" || it.source == source }
     val leads = inSource.filter { when (view) { "all" -> true; "open" -> it.status !in CLOSED; else -> it.status == view } }
@@ -278,52 +291,68 @@ private fun LeadList(
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 150.dp)) {
-        item {
+    val header: @Composable () -> Unit = {
             Column(Modifier.fillMaxWidth().background(Band).statusBarsPadding().padding(top = 14.dp, bottom = 16.dp)) {
-                Row(Modifier.padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    LocalMark.current(Modifier.size(40.dp).shadow(6.dp, RoundedCornerShape(24)))
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        T("ourLeads", 22, FontWeight.ExtraBold, Color.White)
-                        T("$openCount פתוחים · שלום ${d.me.name}", 13, color = Color.White.copy(alpha = .72f))
-                    }
-                    Spacer(Modifier.weight(1f))
-                    if (d.pending > 0) Row(
-                        Modifier.clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(6.dp).clip(CircleShape).background(Amber))
-                        Spacer(Modifier.width(6.dp))
-                        T("${d.pending} בקריאה", 12, color = Color.White)
-                    }
+            Row(Modifier.padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                LocalMark.current(Modifier.size(40.dp).shadow(6.dp, RoundedCornerShape(24)))
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    T("ourLeads", 22, FontWeight.ExtraBold, Color.White)
+                    T("$openCount פתוחים · שלום ${d.me.name}", 13, color = Color.White.copy(alpha = .72f))
                 }
-                // Partner switch
-                Row(
-                    Modifier.padding(start = 18.dp, top = 16.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
+                Spacer(Modifier.weight(1f))
+                if (d.pending > 0) Row(
+                    Modifier.clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    (listOf(SourceDef("all", "כולם", "")) + d.sources).forEach { s ->
-                        val sel = s.id == source
-                        T(
-                            s.label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f),
-                            Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
-                                .clickable { onSource(s.id) }.padding(horizontal = 14.dp, vertical = 7.dp),
-                        )
-                    }
-                }
-                // Pipeline strip
-                LazyRow(
-                    Modifier.padding(top = 14.dp),
-                    contentPadding = PaddingValues(horizontal = 18.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    item { Stage("פתוחים", openCount, view == "open", null) { onView("open") } }
-                    item { Spacer(Modifier.width(4.dp)) }
-                    items(PIPELINE + SIDE) { s -> Stage(label(s), inSource.count { it.status == s }, view == s, tone(s).dot) { onView(s) } }
-                    item { Stage("הכל", inSource.size, view == "all", null) { onView("all") } }
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(Amber))
+                    Spacer(Modifier.width(6.dp))
+                    T("${d.pending} בקריאה", 12, color = Color.White)
                 }
             }
+            // Leads / calendar
+            Row(Modifier.padding(start = 18.dp, top = 16.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp)) {
+                listOf("leads" to "לידים", "calendar" to "יומן").forEach { (id, label) ->
+                    val sel = id == mode
+                    T(
+                        label, 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) Color.White else Color.White.copy(alpha = .82f),
+                        Modifier.clip(CircleShape).background(if (sel) Amber else Color.Transparent)
+                            .clickable { onMode(id) }.padding(horizontal = 16.dp, vertical = 7.dp),
+                    )
+                }
+            }
+            // Partner switch
+            Row(
+                Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
+            ) {
+                (listOf(SourceDef("all", "כולם", "")) + d.sources).forEach { s ->
+                    val sel = s.id == source
+                    T(
+                        s.label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f),
+                        Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
+                            .clickable { onSource(s.id) }.padding(horizontal = 14.dp, vertical = 7.dp),
+                    )
+                }
+            }
+            // Pipeline strip
+            if (mode == "leads") LazyRow(
+                Modifier.padding(top = 14.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                item { Stage("פתוחים", openCount, view == "open", null) { onView("open") } }
+                item { Spacer(Modifier.width(4.dp)) }
+                items(PIPELINE + SIDE) { s -> Stage(label(s), inSource.count { it.status == s }, view == s, tone(s).dot) { onView(s) } }
+                item { Stage("הכל", inSource.size, view == "all", null) { onView("all") } }
+            }
         }
+    }
+    if (mode == "calendar") {
+        CalendarScreen(d, inSource, header, onOpen)
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 150.dp)) {
+        item { header() }
         if (error != null) item { T(error, 14, color = Danger, modifier = Modifier.padding(18.dp, 12.dp)) }
         if (fresh.isNotEmpty()) {
             item { SectionHead("מחכים לשיחה ראשונה", "ליד חם שווה יותר") }
@@ -407,9 +436,13 @@ private fun LeadCard(d: BoardData, l: Lead, onClick: () -> Unit) {
                         } else T(short(l.lastMessageAt ?: l.createdAt), 12, color = Muted)
                     }
                     T(l.title, 17, FontWeight.Bold, modifier = Modifier.padding(top = 8.dp), maxLines = 2, lineHeight = 22)
-                    val sub = listOfNotNull(l.customerName, l.city, l.visitAt?.let { "ביקור $it" }).joinToString(" · ").ifEmpty { l.trade ?: "" }
+                    val sub = listOfNotNull(l.customerName, l.city).joinToString(" · ").ifEmpty { l.trade ?: "" }
                     if (sub.isNotEmpty()) T(sub, 14, color = Muted, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                     l.nextStep?.let { T("← $it", 14, color = Ink2, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
+                    if (l.meetingAt != null || l.workStart != null) Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        l.meetingAt?.let { T("פגישה ${sayDay(it)} ${it.drop(11).take(5)}", 12, FontWeight.SemiBold, MeetInk, Modifier.clip(RoundedCornerShape(6.dp)).background(MeetSoft).padding(horizontal = 8.dp, vertical = 2.dp)) }
+                        l.workStart?.let { s0 -> T("עבודה ${sayDay(s0)}" + (l.workEnd?.takeIf { it != s0 }?.let { " – ${sayDay(it)}" } ?: ""), 12, FontWeight.SemiBold, WorkInk, Modifier.clip(RoundedCornerShape(6.dp)).background(WorkSoft).padding(horizontal = 8.dp, vertical = 2.dp)) }
+                    }
                     DealLine(l.deal)
                 }
                 if (thumb != null) {
@@ -588,6 +621,18 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                 }
             }
             item {
+                ScheduleSection(l, busy) { fields ->
+                    busy = true
+                    scope.launch {
+                        when (val r = api.setSchedule(l.id, fields)) {
+                            is Result.Ok -> { error = null; onChanged() }
+                            is Result.Err -> error = r.message
+                        }
+                        busy = false
+                    }
+                }
+            }
+            item {
                 DealSection(l.deal, busy) { d ->
                     busy = true
                     scope.launch {
@@ -604,7 +649,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                     Column {
                         val facts = listOfNotNull(
                             l.nextStep?.let { Triple("הצעד הבא", it, true) },
-                            l.visitAt?.let { Triple("ביקור", it, false) },
+                            l.visitAt?.takeIf { l.meetingAt == null }?.let { Triple("ביקור", it, false) },
                             l.trade?.let { Triple("עבודה", it, false) },
                             l.customerName?.let { Triple("לקוח", it, false) },
                             place.ifEmpty { null }?.let { Triple("כתובת", it, false) },
@@ -758,7 +803,7 @@ private fun VoiceDock(
         working = false
     }
 
-    Column(modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 14.dp, vertical = 12.dp)) {
+    Column(modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = LocalDockBottom.current)) {
         AnimatedVisibility(reply != null, enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut()) {
             reply?.let { r ->
                 Column(
@@ -1044,5 +1089,281 @@ private fun DealLine(d: Deal) {
             T("נשאר ${shekel(it)}", 12, FontWeight.Bold, if (it >= 0) Color(0xFF0B5C47) else Danger,
                 Modifier.clip(RoundedCornerShape(6.dp)).background(if (it >= 0) Color(0xFFDEF5EC) else Color(0xFFFDE8E8)).padding(horizontal = 8.dp, vertical = 2.dp))
         }
+    }
+}
+
+// ── Calendar ─────────────────────────────────────────────────────────────────
+// Two colours, two kinds of commitment: GREEN = a meeting with a customer we have no
+// contract with (one moment), RED = the working days of a job with a contract (a span).
+private val MeetGreen = Color(0xFF16A34A)
+private val MeetInk = Color(0xFF166534)
+private val MeetSoft = Color(0xFFDCFCE7)
+private val WorkRed = Color(0xFFDC2626)
+private val WorkInk = Color(0xFF991B1B)
+private val WorkSoft = Color(0xFFFEE2E2)
+private val HEB_DAYS = listOf("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
+private val HEB_MONTHS = listOf("ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר")
+
+private fun day(s: String): kotlinx.datetime.LocalDate? = runCatching { kotlinx.datetime.LocalDate.parse(s.take(10)) }.getOrNull()
+/** Sunday = 0, as the week runs in Israel. */
+private fun kotlinx.datetime.LocalDate.sundayIndex() = (dayOfWeek.ordinal + 1) % 7
+private fun sayDay(s: String): String = day(s)?.let { "${HEB_DAYS[it.sundayIndex()]} ${it.dayOfMonth}.${it.monthNumber}" } ?: s
+
+private sealed class CalEntry(val lead: Lead) {
+    class Meeting(lead: Lead, val time: String) : CalEntry(lead)
+    class Work(lead: Lead, val first: Boolean, val last: Boolean, val start: String, val end: String) : CalEntry(lead)
+}
+
+private fun entriesByDay(leads: List<Lead>): Map<kotlinx.datetime.LocalDate, List<CalEntry>> {
+    val map = mutableMapOf<kotlinx.datetime.LocalDate, MutableList<CalEntry>>()
+    for (l in leads) {
+        if (l.status == "lost") continue
+        l.meetingAt?.let { m -> day(m)?.let { map.getOrPut(it) { mutableListOf() }.add(CalEntry.Meeting(l, m.drop(11).take(5))) } }
+        val s = l.workStart?.let(::day) ?: continue
+        val e = l.workEnd?.let(::day)?.takeIf { it >= s } ?: s
+        var d = s
+        while (d <= e) {
+            map.getOrPut(d) { mutableListOf() }.add(CalEntry.Work(l, d == s, d == e, l.workStart, (l.workEnd ?: l.workStart)))
+            d = d.plus(1, kotlinx.datetime.DateTimeUnit.DAY)
+        }
+    }
+    return map.mapValues { (_, v) -> v.sortedWith(compareBy({ it !is CalEntry.Work }, { (it as? CalEntry.Meeting)?.time ?: "" })) }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CalendarScreen(d: BoardData, leads: List<Lead>, header: @Composable () -> Unit, onOpen: (Int) -> Unit) {
+    val today = Clock.System.now().toLocalDateTime(tz).date
+    var month by remember { mutableStateOf(kotlinx.datetime.LocalDate(today.year, today.monthNumber, 1)) }
+    var selected by remember { mutableStateOf(today) }
+    val byDay = remember(leads) { entriesByDay(leads) }
+    val cells = buildList<kotlinx.datetime.LocalDate?> {
+        repeat(month.sundayIndex()) { add(null) }
+        var x = month
+        while (x.monthNumber == month.monthNumber) { add(x); x = x.plus(1, kotlinx.datetime.DateTimeUnit.DAY) }
+        while (size % 7 != 0) add(null)
+    }
+    val upcoming = byDay.entries.filter { it.key >= today }.sortedBy { it.key }
+        .flatMap { (k, v) -> v.filter { it is CalEntry.Meeting || (it as CalEntry.Work).first }.map { k to it } }.take(6)
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 150.dp)) {
+        item { header() }
+        item {
+            Surface(Modifier.padding(16.dp).fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, Line)) {
+                Column {
+                    Row(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        T("›", 24, modifier = Modifier.clip(CircleShape).clickable { month = month.minus(1, kotlinx.datetime.DateTimeUnit.MONTH) }.padding(horizontal = 14.dp, vertical = 2.dp))
+                        T("${HEB_MONTHS[month.monthNumber - 1]} ${month.year}", 18, FontWeight.ExtraBold, modifier = Modifier.widthIn(min = 130.dp).wrapContentWidth(Alignment.CenterHorizontally))
+                        T("‹", 24, modifier = Modifier.clip(CircleShape).clickable { month = month.plus(1, kotlinx.datetime.DateTimeUnit.MONTH) }.padding(horizontal = 14.dp, vertical = 2.dp))
+                        Spacer(Modifier.weight(1f))
+                        T("היום", 14, modifier = Modifier.clip(CircleShape).border(1.dp, Line, CircleShape)
+                            .clickable { month = kotlinx.datetime.LocalDate(today.year, today.monthNumber, 1); selected = today }.padding(horizontal = 12.dp, vertical = 4.dp))
+                    }
+                    Row(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(9.dp).clip(CircleShape).background(MeetGreen)); T("  פגישה (לפני חוזה)", 12, color = Muted)
+                        Spacer(Modifier.width(14.dp))
+                        Box(Modifier.width(18.dp).height(9.dp).clip(RoundedCornerShape(2.dp)).background(WorkRed)); T("  עבודה (יש חוזה)", 12, color = Muted)
+                    }
+                    HorizontalDivider(color = Line)
+                    Row { listOf("א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳").forEach { T(it, 11, color = Muted, modifier = Modifier.weight(1f).padding(vertical = 6.dp).wrapContentWidth(Alignment.CenterHorizontally)) } }
+                    cells.chunked(7).forEach { week ->
+                        HorizontalDivider(color = Line)
+                        Row(Modifier.height(IntrinsicSize.Min)) {
+                            week.forEach { cell ->
+                                val es = cell?.let { byDay[it] } ?: emptyList()
+                                val sel = cell == selected
+                                Column(
+                                    Modifier.weight(1f).heightIn(min = 64.dp).fillMaxHeight()
+                                        .background(if (cell == null) Paper.copy(alpha = .6f) else if (sel) Color(0xFFEEF6FC) else Color.White)
+                                        .then(if (cell != null) Modifier.clickable { selected = cell } else Modifier).padding(vertical = 3.dp),
+                                ) {
+                                    if (cell != null) {
+                                        val isToday = cell == today
+                                        Box(
+                                            Modifier.padding(start = 3.dp).size(22.dp).clip(CircleShape).background(if (isToday) Harbour else Color.Transparent),
+                                            contentAlignment = Alignment.Center,
+                                        ) { T("${cell.dayOfMonth}", 12, if (isToday || sel) FontWeight.Bold else FontWeight.Normal, if (isToday) Color.White else Ink2) }
+                                        es.take(3).forEach { e ->
+                                            when (e) {
+                                                is CalEntry.Work -> Box(
+                                                    Modifier.padding(top = 2.dp).fillMaxWidth()
+                                                        .padding(start = if (e.first) 2.dp else 0.dp, end = if (e.last) 2.dp else 0.dp)
+                                                        .height(14.dp)
+                                                        .clip(RoundedCornerShape(topStart = if (e.first) 5.dp else 0.dp, bottomStart = if (e.first) 5.dp else 0.dp, topEnd = if (e.last) 5.dp else 0.dp, bottomEnd = if (e.last) 5.dp else 0.dp))
+                                                        .background(WorkRed),
+                                                ) { if (e.first) T(e.lead.title.substringBefore("–").trim(), 9, FontWeight.SemiBold, Color.White, Modifier.padding(horizontal = 3.dp), maxLines = 1) }
+                                                is CalEntry.Meeting -> T(
+                                                    e.time, 9, FontWeight.Bold, MeetInk,
+                                                    Modifier.padding(top = 2.dp, start = 2.dp, end = 2.dp).fillMaxWidth().clip(RoundedCornerShape(5.dp)).background(MeetSoft).padding(horizontal = 3.dp),
+                                                    maxLines = 1,
+                                                )
+                                            }
+                                        }
+                                        if (es.size > 3) T("+${es.size - 3}", 9, color = Muted, modifier = Modifier.padding(start = 3.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item { T(if (selected == today) "היום" else "${HEB_DAYS[selected.sundayIndex()]} ${selected.dayOfMonth}.${selected.monthNumber}", 13, FontWeight.Bold, Ink2, Modifier.padding(start = 18.dp, bottom = 6.dp)) }
+        val dayEs = byDay[selected].orEmpty()
+        if (dayEs.isEmpty()) item {
+            T("אין כלום ביום הזה.", 14, color = Muted, modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(14.dp))
+        }
+        items(dayEs) { CalEntryRow(it, null) { onOpen(it.lead.id) } }
+        if (upcoming.isNotEmpty()) {
+            item { T("הקרובים", 13, FontWeight.Bold, Ink2, Modifier.padding(start = 18.dp, top = 18.dp, bottom = 6.dp)) }
+            items(upcoming) { (k, e) -> CalEntryRow(e, k) { onOpen(e.lead.id) } }
+        }
+    }
+}
+
+@Composable
+private fun CalEntryRow(e: CalEntry, dayOf: kotlinx.datetime.LocalDate?, onClick: () -> Unit) {
+    val meeting = e is CalEntry.Meeting
+    Row(
+        Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(14.dp))
+            .background(Color.White).border(1.dp, Line, RoundedCornerShape(14.dp)).clickable(onClick = onClick),
+    ) {
+        Box(Modifier.width(5.dp).fillMaxHeight().background(if (meeting) MeetGreen else WorkRed))
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val label = when (e) {
+                    is CalEntry.Meeting -> "פגישה" + (dayOf?.let { " · ${HEB_DAYS[it.sundayIndex()]} ${it.dayOfMonth}.${it.monthNumber}" } ?: "") + " · ${e.time}"
+                    is CalEntry.Work -> "עבודה · ${sayDay(e.start)}" + if (e.end != e.start) " – ${sayDay(e.end)}" else ""
+                }
+                T(label, 12, FontWeight.Bold, if (meeting) MeetInk else WorkInk)
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(20.dp).clip(CircleShape).background(partnerColor(e.lead.source)), contentAlignment = Alignment.Center) {
+                    T(partnerInitial(e.lead.source), 10, FontWeight.Bold, Color.White)
+                }
+            }
+            T(e.lead.title, 15, FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp), maxLines = 1)
+            val sub = listOfNotNull(e.lead.customerName, e.lead.address ?: e.lead.city).joinToString(" · ")
+            if (sub.isNotEmpty()) T(sub, 13, color = Muted, maxLines = 1)
+        }
+    }
+}
+
+/** Put a lead on the calendar: green meeting (date + time), red working days (start–end). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScheduleSection(l: Lead, busy: Boolean, onSave: (Map<String, String?>) -> Unit) {
+    var pick by remember { mutableStateOf<String?>(null) } // "meetDate" | "meetTime" | "workRange"
+    var pendingDate by remember { mutableStateOf<String?>(null) }
+    Surface(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, Line)) {
+        Column(Modifier.padding(12.dp)) {
+            T("ביומן", 14, FontWeight.Bold, Ink2, Modifier.padding(start = 4.dp, bottom = 8.dp))
+            ScheduleRow(
+                "פגישה", "לקוח שעוד אין איתו חוזה", MeetGreen, MeetInk, Color(0xFFF0FDF4),
+                l.meetingAt?.let { "${sayDay(it)} ${it.drop(11).take(5)}" },
+                if (l.meetingAt == null) "קבע פגישה" else "שנה", busy,
+                onEdit = { pick = "meetDate" }, onClear = if (l.meetingAt != null) ({ onSave(mapOf("meetingAt" to null)) }) else null,
+            )
+            Spacer(Modifier.height(8.dp))
+            ScheduleRow(
+                "ימי עבודה", "נסגר חוזה", WorkRed, WorkInk, Color(0xFFFEF2F2),
+                l.workStart?.let { s -> sayDay(s) + (l.workEnd?.takeIf { it != s }?.let { " – ${sayDay(it)}" } ?: "") },
+                if (l.workStart == null) "קבע ימי עבודה" else "שנה", busy,
+                onEdit = { pick = "workRange" }, onClear = if (l.workStart != null) ({ onSave(mapOf("workStart" to null, "workEnd" to null)) }) else null,
+            )
+        }
+    }
+    // Pickers in the calendar's own colours: green for a meeting, red for working days.
+    val meetColors = DatePickerDefaults.colors(
+        containerColor = Color.White, selectedDayContainerColor = MeetGreen, todayDateBorderColor = MeetGreen,
+        todayContentColor = MeetInk, headlineContentColor = MeetInk, selectedYearContainerColor = MeetGreen,
+    )
+    val workColors = DatePickerDefaults.colors(
+        containerColor = Color.White, selectedDayContainerColor = WorkRed, dayInSelectionRangeContainerColor = WorkSoft,
+        dayInSelectionRangeContentColor = WorkInk, todayDateBorderColor = WorkRed, todayContentColor = WorkInk,
+        headlineContentColor = WorkInk, selectedYearContainerColor = WorkRed,
+    )
+    fun millisOf(s: String?): Long? = s?.let(::day)?.atStartOfDayIn(TimeZone.UTC)?.toEpochMilliseconds()
+    fun dateOf(ms: Long): String = Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date.toString()
+
+    when (pick) {
+        "meetDate" -> {
+            val st = rememberDatePickerState(initialSelectedDateMillis = millisOf(l.meetingAt) ?: Clock.System.now().toEpochMilliseconds())
+            DatePickerDialog(
+                onDismissRequest = { pick = null },
+                confirmButton = { TextButton({ st.selectedDateMillis?.let { pendingDate = dateOf(it); pick = "meetTime" } }) { Text("המשך לשעה", color = MeetInk, fontWeight = FontWeight.Bold) } },
+                dismissButton = { TextButton({ pick = null }) { Text("ביטול", color = Muted) } },
+                colors = meetColors,
+            ) { DatePicker(st, colors = meetColors, title = { T("יום הפגישה", 16, FontWeight.Bold, modifier = Modifier.padding(start = 24.dp, top = 16.dp)) }, showModeToggle = false) }
+        }
+        "meetTime" -> {
+            val cur = l.meetingAt?.drop(11)?.take(5)?.split(":")
+            val st = rememberTimePickerState(initialHour = cur?.getOrNull(0)?.toIntOrNull() ?: 9, initialMinute = cur?.getOrNull(1)?.toIntOrNull() ?: 0, is24Hour = true)
+            AlertDialog(
+                onDismissRequest = { pick = null },
+                title = { T("שעת הפגישה · ${pendingDate?.let(::sayDay) ?: ""}", 16, FontWeight.Bold) },
+                text = {
+                    TimePicker(
+                        st,
+                        colors = TimePickerDefaults.colors(
+                            clockDialColor = MeetSoft, selectorColor = MeetGreen,
+                            timeSelectorSelectedContainerColor = MeetSoft, timeSelectorSelectedContentColor = MeetInk,
+                        ),
+                    )
+                },
+                containerColor = Color.White,
+                confirmButton = { TextButton({ onSave(mapOf("meetingAt" to "${pendingDate}T${two(st.hour)}:${two(st.minute)}")); pick = null }) { Text("שמור פגישה", color = MeetInk, fontWeight = FontWeight.Bold) } },
+                dismissButton = { TextButton({ pick = null }) { Text("ביטול", color = Muted) } },
+            )
+        }
+        "workRange" -> {
+            val st = rememberDateRangePickerState(initialSelectedStartDateMillis = millisOf(l.workStart), initialSelectedEndDateMillis = millisOf(l.workEnd))
+            DatePickerDialog(
+                onDismissRequest = { pick = null },
+                confirmButton = {
+                    TextButton(
+                        {
+                            val s = st.selectedStartDateMillis ?: return@TextButton
+                            val e = st.selectedEndDateMillis ?: s
+                            onSave(mapOf("workStart" to dateOf(s), "workEnd" to dateOf(e))); pick = null
+                        },
+                        enabled = st.selectedStartDateMillis != null,
+                    ) { Text("שמור ימי עבודה", color = WorkInk, fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = { TextButton({ pick = null }) { Text("ביטול", color = Muted) } },
+                colors = workColors,
+            ) {
+                DateRangePicker(
+                    st, Modifier.height(480.dp), colors = workColors,
+                    title = { T("ימי העבודה — בחרו יום התחלה ויום סיום", 15, FontWeight.Bold, modifier = Modifier.padding(start = 24.dp, top = 16.dp)) },
+                    showModeToggle = false,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleRow(
+    title: String, hint: String, accent: Color, ink: Color, soft: Color, value: String?, action: String, busy: Boolean,
+    onEdit: () -> Unit, onClear: (() -> Unit)?,
+) {
+    Row(
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(14.dp)).background(soft),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(4.dp).fillMaxHeight().background(accent))
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T(title, 15, FontWeight.SemiBold, ink)
+                T("  $hint", 11, color = ink.copy(alpha = .65f))
+            }
+            T(value ?: "—", 16, FontWeight.Bold, if (value != null) ink else Muted, Modifier.padding(top = 2.dp))
+        }
+        if (onClear != null) T("הסר", 13, color = Muted, modifier = Modifier.clip(CircleShape).clickable(enabled = !busy, onClick = onClear).padding(horizontal = 10.dp, vertical = 6.dp))
+        T(
+            action, 14, FontWeight.SemiBold, Color.White,
+            Modifier.padding(end = 10.dp).clip(CircleShape).background(if (busy) accent.copy(alpha = .4f) else accent)
+                .clickable(enabled = !busy, onClick = onEdit).padding(horizontal = 14.dp, vertical = 8.dp),
+        )
     }
 }
