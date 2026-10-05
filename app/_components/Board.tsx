@@ -27,6 +27,7 @@ export default function Board() {
   const [view, setView] = useState<View>("open");
   const [mode, setMode] = useState<"leads" | "calendar">("leads");
   const [source, setSource] = useState<string>("all");
+  const [dated, setDated] = useState<Dated>("any");
   const [openId, setOpenId] = useState<number | null>(null);
   const [reply, setReply] = useState<CommandReply | null>(null);
 
@@ -71,7 +72,8 @@ export default function Board() {
     );
 
   const leads = inSource.filter((l) =>
-    view === "all" ? true : view === "open" ? !CLOSED.includes(l.status) : l.status === view,
+    (dated === "any" || datedOf(l) === dated) &&
+    (view === "all" ? true : view === "open" ? !CLOSED.includes(l.status) : l.status === view),
   );
   // The ones waiting for a first call go first, oldest-waiting on top: they are losing value.
   const fresh = view === "open" ? leads.filter((l) => l.status === "new").sort((a, b) => (a.lastMessageAt ?? a.createdAt).localeCompare(b.lastMessageAt ?? b.createdAt)) : [];
@@ -136,6 +138,23 @@ export default function Board() {
               </button>
             ))}
           </div>
+          {mode === "leads" && (
+            <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
+              {DATED.map(([id, label, dot]) => (
+                <button
+                  key={id}
+                  data-id={`filter-dated-${id}`}
+                  onClick={() => setDated(id)}
+                  className={`rounded-full px-3.5 py-1.5 transition cursor-pointer flex items-center gap-1.5 ${
+                    dated === id ? "bg-white text-ink font-semibold shadow" : "text-white/80 hover:text-white"
+                  }`}
+                >
+                  {dot && <span className={`size-2 rounded-full ${dot}`} />}
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           </div>
         </div>
 
@@ -266,6 +285,18 @@ function PartnerBadge({ source, data }: { source: string; data: BoardData }) {
   );
 }
 
+/** Has a date been set on this lead? Work (red) outranks a meeting (green); "none" is usually one nobody has talked to yet. */
+type Dated = "any" | "meeting" | "work" | "none";
+const DATED: [Dated, string, string | null][] = [
+  ["any", "כל המועדים", null],
+  ["meeting", "פגישה", "bg-[#16a34a]"],
+  ["work", "עבודה", "bg-[#dc2626]"],
+  ["none", "בלי מועד", "bg-white/50"],
+];
+function datedOf(l: Lead): Dated {
+  return l.workStart ? "work" : l.meetingAt ? "meeting" : "none";
+}
+
 function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOpen: () => void }) {
   const tone = STATUS_TONE[l.status];
   const thumb = l.messages.find((m) => m.mediaType === "image" && m.mediaUrl)?.mediaUrl;
@@ -279,29 +310,25 @@ function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOp
       <button data-id="lead-card" onClick={onOpen} className="w-full text-start p-4 ps-5 flex gap-3 cursor-pointer">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${tone.pill}`}>{l.statusLabel}</span>
+            {l.status !== "new" && <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${tone.pill}`}>{l.statusLabel}</span>}
             <PartnerBadge source={l.source} data={data} />
-            <span className="ms-auto text-xs text-muted tabular-nums">{when(l.lastMessageAt ?? l.createdAt)}</span>
+            {l.workStart ? (
+              <span className="ms-auto rounded-full bg-[#fee2e2] text-[#991b1b] px-2 py-0.5 text-[11.5px] font-bold" title="נקבע מועד לעבודה">
+                עבודה {sayDay(l.workStart)}
+                {l.workEnd && l.workEnd !== l.workStart ? ` – ${sayDay(l.workEnd)}` : ""}
+              </span>
+            ) : l.meetingAt ? (
+              <span className="ms-auto rounded-full bg-[#dcfce7] text-[#166534] px-2 py-0.5 text-[11.5px] font-bold" title="נקבעה פגישה — פוטנציאל לכסף">
+                פגישה {sayDay(l.meetingAt.slice(0, 10))} {l.meetingAt.slice(11, 16)}
+              </span>
+            ) : (
+              <span className="ms-auto text-xs text-muted tabular-nums">{when(l.lastMessageAt ?? l.createdAt)}</span>
+            )}
           </div>
           <h3 className="font-bold text-[17px] leading-snug mt-2">{l.title}</h3>
           <p className="text-sm text-muted mt-0.5 truncate">
             {[l.customerName, l.city].filter(Boolean).join(" · ") || l.trade}
           </p>
-          {(l.meetingAt || l.workStart) && (
-            <p className="mt-1.5 flex flex-wrap gap-1.5 text-[12.5px] font-semibold">
-              {l.meetingAt && (
-                <span className="rounded-md bg-[#dcfce7] text-[#166534] px-2 py-0.5">
-                  פגישה {sayDay(l.meetingAt.slice(0, 10))} {l.meetingAt.slice(11, 16)}
-                </span>
-              )}
-              {l.workStart && (
-                <span className="rounded-md bg-[#fee2e2] text-[#991b1b] px-2 py-0.5">
-                  עבודה {sayDay(l.workStart)}
-                  {l.workEnd && l.workEnd !== l.workStart ? ` – ${sayDay(l.workEnd)}` : ""}
-                </span>
-              )}
-            </p>
-          )}
           {l.nextStep && <p className="text-sm text-ink-2 mt-1.5 line-clamp-1">← {l.nextStep}</p>}
           <DealLine lead={l} />
         </div>

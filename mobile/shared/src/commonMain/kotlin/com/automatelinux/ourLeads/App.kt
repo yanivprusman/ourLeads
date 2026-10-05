@@ -132,6 +132,9 @@ private fun short(iso: String?): String {
     else "${t.dayOfMonth}.${t.monthNumber} ${two(t.hour)}:${two(t.minute)}"
 }
 
+/** Work (red) outranks a meeting (green); "none" is usually a lead nobody has talked to yet. */
+private fun datedOf(l: Lead) = if (l.workStart != null) "work" else if (l.meetingAt != null) "meeting" else "none"
+
 private fun prettyPhone(p: String) = if (p.length == 10) "${p.take(3)}-${p.drop(3)}" else p
 private fun intlPhone(p: String) = if (p.startsWith("0")) "972" + p.drop(1) else p
 private fun String.encodeUrl(): String = buildString {
@@ -215,6 +218,7 @@ private fun BoardScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var view by remember { mutableStateOf("open") }
     var source by remember { mutableStateOf("all") }
+    var dated by remember { mutableStateOf("any") }
     var mode by remember { mutableStateOf("leads") }
     var openId by remember { mutableStateOf<Int?>(null) }
     var reply by remember { mutableStateOf<CommandReply?>(null) }
@@ -243,7 +247,7 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, mode, onView = { view = it }, onSource = { source = it }, onMode = { mode = it }, onOpen = { openId = it })
+            LeadList(d, error, view, source, mode, dated, onView = { view = it }, onSource = { source = it }, onDated = { dated = it }, onMode = { mode = it }, onOpen = { openId = it })
             VoiceDock(
                 reply = reply,
                 onReply = { reply = it; tick++ },
@@ -267,11 +271,11 @@ private fun BoardScreen() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LeadList(
-    d: BoardData, error: String?, view: String, source: String, mode: String,
-    onView: (String) -> Unit, onSource: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
+    d: BoardData, error: String?, view: String, source: String, mode: String, dated: String,
+    onView: (String) -> Unit, onSource: (String) -> Unit, onDated: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
     val inSource = d.leads.filter { source == "all" || it.source == source }
-    val leads = inSource.filter { when (view) { "all" -> true; "open" -> it.status !in CLOSED; else -> it.status == view } }
+    val leads = inSource.filter { dated == "any" || datedOf(it) == dated }.filter { when (view) { "all" -> true; "open" -> it.status !in CLOSED; else -> it.status == view } }
     val fresh = if (view == "open") leads.filter { it.status == "new" }.sortedBy { it.lastMessageAt ?: it.createdAt } else emptyList()
     val rest = if (view == "open") leads.filter { it.status != "new" } else leads
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
@@ -318,6 +322,22 @@ private fun LeadList(
                         Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
                             .clickable { onSource(s.id) }.padding(horizontal = 14.dp, vertical = 7.dp),
                     )
+                }
+            }
+            // Has a date been set: meeting (green) / work (red) / neither
+            if (mode == "leads") Row(
+                Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
+            ) {
+                listOf(Triple("any", "כל המועדים", null), Triple("meeting", "פגישה", MeetGreen), Triple("work", "עבודה", WorkRed), Triple("none", "בלי מועד", Color.White.copy(alpha = .5f))).forEach { (id, label, dot) ->
+                    val sel = id == dated
+                    Row(
+                        Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
+                            .clickable { onDated(id) }.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (dot != null) { Box(Modifier.size(7.dp).clip(CircleShape).background(if (sel && id == "none") Muted else dot)); Spacer(Modifier.width(5.dp)) }
+                        T(label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f))
+                    }
                 }
             }
             // Pipeline strip
@@ -411,20 +431,19 @@ private fun LeadCard(d: BoardData, l: Lead, onClick: () -> Unit) {
             Row(Modifier.weight(1f).padding(14.dp)) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Pill(l.statusLabel, t.bg, t.fg, strike = l.status == "lost")
-                        Spacer(Modifier.width(8.dp))
+                        if (l.status != "new") { Pill(l.statusLabel, t.bg, t.fg, strike = l.status == "lost"); Spacer(Modifier.width(8.dp)) }
                         PartnerBadge(l.source, d.sources.firstOrNull { it.id == l.source }?.label)
                         Spacer(Modifier.weight(1f))
-                        T(short(l.lastMessageAt ?: l.createdAt), 12, color = Muted)
+                        when {
+                            l.workStart != null -> Pill("עבודה ${sayDay(l.workStart)}" + (l.workEnd?.takeIf { it != l.workStart }?.let { " – ${sayDay(it)}" } ?: ""), WorkSoft, WorkInk)
+                            l.meetingAt != null -> Pill("פגישה ${sayDay(l.meetingAt)} ${l.meetingAt.drop(11).take(5)}", MeetSoft, MeetInk)
+                            else -> T(short(l.lastMessageAt ?: l.createdAt), 12, color = Muted)
+                        }
                     }
                     T(l.title, 17, FontWeight.Bold, modifier = Modifier.padding(top = 8.dp), maxLines = 2, lineHeight = 22)
                     val sub = listOfNotNull(l.customerName, l.city).joinToString(" · ").ifEmpty { l.trade ?: "" }
                     if (sub.isNotEmpty()) T(sub, 14, color = Muted, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                     l.nextStep?.let { T("← $it", 14, color = Ink2, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
-                    if (l.meetingAt != null || l.workStart != null) Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        l.meetingAt?.let { T("פגישה ${sayDay(it)} ${it.drop(11).take(5)}", 12, FontWeight.SemiBold, MeetInk, Modifier.clip(RoundedCornerShape(6.dp)).background(MeetSoft).padding(horizontal = 8.dp, vertical = 2.dp)) }
-                        l.workStart?.let { s0 -> T("עבודה ${sayDay(s0)}" + (l.workEnd?.takeIf { it != s0 }?.let { " – ${sayDay(it)}" } ?: ""), 12, FontWeight.SemiBold, WorkInk, Modifier.clip(RoundedCornerShape(6.dp)).background(WorkSoft).padding(horizontal = 8.dp, vertical = 2.dp)) }
-                    }
                     DealLine(l.deal)
                 }
                 if (thumb != null) {
