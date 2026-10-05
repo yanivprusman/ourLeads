@@ -223,6 +223,7 @@ private fun BoardScreen() {
     var mode by remember { mutableStateOf("leads") }
     var openId by remember { mutableStateOf<Int?>(null) }
     var reply by remember { mutableStateOf<CommandReply?>(null) }
+    var talkError by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
@@ -248,12 +249,18 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, mode, dated, onView = { view = it }, onSource = { source = it }, onDated = { dated = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; tick++ })
+            LeadList(d, error, view, source, mode, dated, onView = { view = it }, onSource = { source = it }, onDated = { dated = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
             AnimatedVisibility(
                 reply != null, Modifier.align(Alignment.BottomCenter),
                 enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut(),
             ) {
                 reply?.let { ReplyBubble(it, { reply = null }, Modifier.navigationBarsPadding().padding(start = 14.dp, end = 14.dp, bottom = LocalDockBottom.current)) }
+            }
+            talkError?.let {
+                T(it, 14, FontWeight.SemiBold, Danger, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                    .padding(start = 14.dp, end = 14.dp, bottom = LocalDockBottom.current).fillMaxWidth()
+                    .shadow(10.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp)).background(Color(0xFFFDE8E8))
+                    .clickable { talkError = null }.padding(horizontal = 16.dp, vertical = 12.dp))
             }
         }
         StatusScrim()
@@ -272,7 +279,7 @@ private fun BoardScreen() {
 @Composable
 private fun LeadList(
     d: BoardData, error: String?, view: String, source: String, mode: String, dated: String,
-    onView: (String) -> Unit, onSource: (String) -> Unit, onDated: (String) -> Unit, onReply: (CommandReply) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
+    onView: (String) -> Unit, onSource: (String) -> Unit, onDated: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
     val inSource = d.leads.filter { source == "all" || it.source == source }
     val leads = inSource.filter { dated == "any" || datedOf(it) == dated }.filter { when (view) { "all" -> true; "open" -> it.status !in CLOSED; else -> it.status == view } }
@@ -362,8 +369,8 @@ private fun LeadList(
         if (error != null) item { T(error, 14, color = Danger, modifier = Modifier.padding(18.dp, 12.dp)) }
         item { Spacer(Modifier.height(8.dp)) }
         // New leads first, oldest first — no heading; the חדש tile already names them.
-        items(fresh, key = { it.id }) { LeadCard(d, it, onReply) { onOpen(it.id) } }
-        items(rest, key = { it.id }) { LeadCard(d, it, onReply) { onOpen(it.id) } }
+        items(fresh, key = { it.id }) { LeadCard(d, it, onReply, onError) { onOpen(it.id) } }
+        items(rest, key = { it.id }) { LeadCard(d, it, onReply, onError) { onOpen(it.id) } }
         if (leads.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 LocalMark.current(Modifier.size(52.dp).alpha(.3f))
@@ -405,7 +412,7 @@ private fun Pill(text: String, bg: Color, fg: Color, strike: Boolean = false) =
     T(text, 12, FontWeight.SemiBold, fg, Modifier.clip(CircleShape).background(bg).padding(horizontal = 8.dp, vertical = 2.dp), strike = strike)
 
 @Composable
-private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onClick: () -> Unit) {
+private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onClick: () -> Unit) {
     val uri = LocalUriHandler.current
     val t = tone(l.status)
     val thumb = l.messages.firstOrNull { it.mediaType == "image" && it.mediaUrl != null }?.mediaUrl
@@ -436,9 +443,11 @@ private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onC
                     l.nextStep?.let { T("← $it", 14, color = Ink2, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
                     DealLine(l.deal)
                 }
-                if (thumb != null) {
-                    Spacer(Modifier.width(12.dp))
-                    RemoteImage(thumb, Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, Line, RoundedCornerShape(12.dp)))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (thumb != null) RemoteImage(thumb, Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, Line, RoundedCornerShape(12.dp)))
+                    Spacer(Modifier.weight(1f).heightIn(min = 10.dp))
+                    CardTalk(l, onReply, onError)
                 }
             }
         }
@@ -450,8 +459,6 @@ private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onC
                 QuickAction(Icons.AutoMirrored.Filled.Chat, "וואטסאפ", Israel, Modifier.weight(1f)) { uri.openUri("https://wa.me/${intlPhone(phone)}") }
             }
         }
-        HorizontalDivider(color = Line)
-        CardTalk(l, onReply)
     }
 }
 
@@ -835,26 +842,30 @@ private fun ReplyBubble(r: CommandReply, onDismiss: () -> Unit, modifier: Modifi
     }
 }
 
-/** The strip at the bottom of a lead card: hold it and say what happened with this lead. */
+/** The mic on a lead card: hold it and say what happened with this lead. Red while recording, spinner while it works. */
 @Composable
-private fun CardTalk(l: Lead, onReply: (CommandReply) -> Unit) {
+private fun CardTalk(l: Lead, onReply: (CommandReply) -> Unit, onError: (String) -> Unit) {
     val (st, press) = rememberTalk(l.id, onReply)
-    Row(
-        Modifier.fillMaxWidth().background(if (st.recording) Color(0xFFFDE8E8) else Color(0xFFF4F8FB)).then(press)
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(30.dp).clip(CircleShape).background(if (st.recording) Color(0xFFDC2626) else Harbour), contentAlignment = Alignment.Center) {
-            if (st.working) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-            else Icon(Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(18.dp))
+    val failed = st.error != null || st.recorder.permissionDenied
+    // No room for words on a card — the board shows the message.
+    LaunchedEffect(st.error, st.recorder.permissionDenied) {
+        (st.error ?: if (st.recorder.permissionDenied) "צריך הרשאת מיקרופון" else null)?.let(onError)
+    }
+    Box(contentAlignment = Alignment.Center) {
+        if (st.recording) {
+            val inf = rememberInfiniteTransition()
+            val k by inf.animateFloat(1f, 1.8f, infiniteRepeatable(tween(1100, easing = LinearOutSlowInEasing)))
+            val a by inf.animateFloat(.45f, 0f, infiniteRepeatable(tween(1100, easing = LinearOutSlowInEasing)))
+            Box(Modifier.size(46.dp).scale(k).alpha(a).clip(CircleShape).background(Color(0xFFDC2626)))
         }
-        Spacer(Modifier.width(10.dp))
-        when {
-            st.recording -> { T("מקליט 0:${two(st.elapsed)}", 14, FontWeight.SemiBold, Color(0xFFB91C1C)); T("  שחררו לשליחה", 12, color = Muted) }
-            st.working -> T("מבין ומעדכן…", 14, color = Ink2)
-            st.error != null -> T(st.error!!, 13, color = Danger, maxLines = 2)
-            st.recorder.permissionDenied -> T("צריך הרשאת מיקרופון", 13, color = Danger)
-            else -> { T("ספרו לי מה קרה", 14, FontWeight.SemiBold, Harbour); T("  החזיקו ודברו", 12, color = Muted) }
+        Box(
+            Modifier.size(46.dp).clip(CircleShape)
+                .background(if (st.recording || failed) Color(0xFFDC2626) else Harbour)
+                .then(press),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (st.working) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            else Icon(Icons.Default.Mic, "ספרו לי מה קרה", tint = Color.White, modifier = Modifier.size(24.dp))
         }
     }
 }
