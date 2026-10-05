@@ -38,7 +38,7 @@ kotlin {
 }
 
 android {
-    namespace = "com.automatelinux.outLeads.shared"
+    namespace = "com.automatelinux.ourLeads.shared"
     compileSdk = 35
     defaultConfig {
         minSdk = 26

@@ -1,4 +1,4 @@
-package com.automatelinux.outLeads.data
+package com.automatelinux.ourLeads.data
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -29,7 +29,7 @@ private val json = Json { ignoreUnknownKeys = true; isLenient = true; explicitNu
  * exceptions: this is used in a van between jobs, and "the VPN is down" has to
  * read as that rather than as a spinner.
  */
-class OutLeadsApi(baseUrl: String, private val token: String) {
+class OurLeadsApi(baseUrl: String, private val token: String) {
     val base = baseUrl.trimEnd('/')
     val configured: Boolean get() = token.isNotEmpty()
 
@@ -68,7 +68,7 @@ class OutLeadsApi(baseUrl: String, private val token: String) {
     }
 
     suspend fun sayAudio(audio: ByteArray, fileName: String, mime: String): Result<CommandReply> {
-        val boundary = "----outleads${audio.size}x${audio.hashCode()}"
+        val boundary = "----ourleads${audio.size}x${audio.hashCode()}"
         val head = "--$boundary\r\nContent-Disposition: form-data; name=\"audio\"; filename=\"$fileName\"\r\n" +
             "Content-Type: $mime\r\n\r\n"
         val tail = "\r\n--$boundary--\r\n"

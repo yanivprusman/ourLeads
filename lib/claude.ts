@@ -15,9 +15,9 @@ import { mkdirSync } from "node:fs";
  * goes in on stdin: it carries other people's words, and an argv is a place
  * where words get interpreted.
  */
-const WORK_DIR = "/var/tmp/outleads-claude";
+const WORK_DIR = "/var/tmp/ourleads-claude";
 const CLAUDE_BIN = "/root/.local/bin/claude";
-const MODEL = process.env.OUTLEADS_MODEL || "sonnet";
+const MODEL = process.env.OURLEADS_MODEL || "sonnet";
 const TIMEOUT_MS = 480_000;
 
 /**

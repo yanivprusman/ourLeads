@@ -74,7 +74,7 @@ export default function Board() {
       <header className="bg-white border-b border-line sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 pt-3 pb-2">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight">outLeads</h1>
+            <h1 className="text-xl font-bold tracking-tight">ourLeads</h1>
             <span className="text-sm text-muted">שלום {data.me.name}</span>
             {data.pending > 0 && (
               <span className="ms-auto text-xs text-muted flex items-center gap-1.5">

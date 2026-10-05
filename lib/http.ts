@@ -18,7 +18,7 @@ export async function asUser(
   try {
     return await fn(a.user);
   } catch (e) {
-    console.error("[outleads]", e);
+    console.error("[ourleads]", e);
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 }

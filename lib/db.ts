@@ -52,7 +52,7 @@ export function getDb(): DatabaseSync {
   if (db) return db;
   const dir = dataDir();
   mkdirSync(path.join(dir, "media"), { recursive: true });
-  db = new DatabaseSync(path.join(dir, "outleads.sqlite"));
+  db = new DatabaseSync(path.join(dir, "ourleads.sqlite"));
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;

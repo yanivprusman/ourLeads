@@ -23,7 +23,7 @@ export default function SignIn({ linkExpired }: { linkExpired: boolean }) {
   return (
     <main className="min-h-dvh grid place-items-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm bg-white border border-line rounded-2xl p-6 shadow-sm">
-        <h1 className="text-xl font-bold">outLeads</h1>
+        <h1 className="text-xl font-bold">ourLeads</h1>
         <p className="text-muted text-sm mt-1">לוח הלידים המשותף. הזינו את קוד הגישה שקיבלתם.</p>
         <input
           data-id="signin-code"

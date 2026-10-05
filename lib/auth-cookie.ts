@@ -1,1 +1,1 @@
-export const SESSION_COOKIE = "outleads_session";
+export const SESSION_COOKIE = "ourleads_session";

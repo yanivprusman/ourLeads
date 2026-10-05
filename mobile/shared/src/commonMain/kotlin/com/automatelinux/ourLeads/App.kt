@@ -1,4 +1,4 @@
-package com.automatelinux.outLeads
+package com.automatelinux.ourLeads
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -35,11 +35,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.automatelinux.outLeads.data.*
-import com.automatelinux.outLeads.platform.PlatformBackHandler
-import com.automatelinux.outLeads.platform.decodeImage
-import com.automatelinux.outLeads.platform.rememberVoiceRecorder
-import com.automatelinux.outLeads.ui.theme.AppTheme
+import com.automatelinux.ourLeads.data.*
+import com.automatelinux.ourLeads.platform.PlatformBackHandler
+import com.automatelinux.ourLeads.platform.decodeImage
+import com.automatelinux.ourLeads.platform.rememberVoiceRecorder
+import com.automatelinux.ourLeads.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.launch
@@ -78,7 +78,7 @@ private fun intlPhone(p: String): String = if (p.startsWith("0")) "972" + p.drop
 
 @Composable
 fun App(baseUrl: String, token: String) {
-    val api = remember { OutLeadsApi(baseUrl, token) }
+    val api = remember { OurLeadsApi(baseUrl, token) }
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         AppTheme {
             Surface(Modifier.fillMaxSize(), color = Paper) { BoardScreen(api) }
@@ -87,7 +87,7 @@ fun App(baseUrl: String, token: String) {
 }
 
 @Composable
-private fun BoardScreen(api: OutLeadsApi) {
+private fun BoardScreen(api: OurLeadsApi) {
     var data by remember { mutableStateOf<BoardData?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var view by remember { mutableStateOf("open") }
@@ -173,7 +173,7 @@ private fun LeadList(
         stickyHeader {
             Column(Modifier.fillMaxWidth().background(Color.White).padding(top = 12.dp)) {
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("outLeads", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("ourLeads", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
                     Spacer(Modifier.width(10.dp))
                     Text("שלום ${d.me.name}", color = Muted, fontSize = 14.sp)
                     Spacer(Modifier.weight(1f))
@@ -267,7 +267,7 @@ private fun LeadCard(d: BoardData, l: Lead, onClick: () -> Unit) {
 }
 
 private val imageCache = mutableMapOf<String, ImageBitmap>()
-private var apiForImages: OutLeadsApi? = null
+private var apiForImages: OurLeadsApi? = null
 
 @Composable
 private fun RemoteImage(@Suppress("UNUSED_PARAMETER") d: BoardData, path: String, modifier: Modifier, crop: Boolean = true) {
@@ -282,7 +282,7 @@ private fun RemoteImage(@Suppress("UNUSED_PARAMETER") d: BoardData, path: String
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LeadScreen(api: OutLeadsApi, d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () -> Unit) {
+private fun LeadScreen(api: OurLeadsApi, d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () -> Unit) {
     val uri = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -400,7 +400,7 @@ private fun InfoRow(k: String, v: String) {
 }
 
 @Composable
-private fun MessageItem(api: OutLeadsApi, d: BoardData, m: Msg, partner: String) {
+private fun MessageItem(api: OurLeadsApi, d: BoardData, m: Msg, partner: String) {
     val uri = LocalUriHandler.current
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = if (m.fromMe) Arrangement.Start else Arrangement.End) {
         Column(
@@ -426,7 +426,7 @@ private fun MessageItem(api: OutLeadsApi, d: BoardData, m: Msg, partner: String)
 }
 
 @Composable
-private fun VoiceBar(api: OutLeadsApi, onReply: (CommandReply) -> Unit) {
+private fun VoiceBar(api: OurLeadsApi, onReply: (CommandReply) -> Unit) {
     apiForImages = api
     val recorder = rememberVoiceRecorder()
     val scope = rememberCoroutineScope()

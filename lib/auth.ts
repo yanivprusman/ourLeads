@@ -5,7 +5,7 @@ import { users, type User } from "./config";
 /**
  * Who is asking.
  *
- * Each partner has their own secret in `OUTLEADS_USERS`, held two ways:
+ * Each partner has their own secret in `OURLEADS_USERS`, held two ways:
  *  - the phone app sends it as a bearer token;
  *  - a browser signs in once (with the secret, or a timed link from
  *    `scripts/make-link.mjs`) and holds a cookie that is an HMAC of it — the
@@ -31,7 +31,7 @@ function mac(key: string, message: string): string {
 }
 
 function sessionValue(u: User): string {
-  return `${u.id}.${mac(u.token, "outleads-web-session-v1")}`;
+  return `${u.id}.${mac(u.token, "ourleads-web-session-v1")}`;
 }
 
 export function userByToken(token: string): User | null {
@@ -49,7 +49,7 @@ export function userBySession(value: string | undefined): User | null {
 export function userByLink(id: string, exp: number, sig: string): User | null {
   const u = users().find((x) => x.id === id);
   if (!u || !Number.isInteger(exp) || exp * 1000 < Date.now()) return null;
-  return same(sig, mac(u.token, `outleads-web-link-v1:${exp}`)) ? u : null;
+  return same(sig, mac(u.token, `ourleads-web-link-v1:${exp}`)) ? u : null;
 }
 
 export function sessionCookieHeader(request: Request, u: User): string {
@@ -105,7 +105,7 @@ function mediaKey(): string {
 }
 
 export function mediaSig(file: string): string {
-  return mac(mediaKey(), `outleads-media-v1:${file}`).slice(0, 32);
+  return mac(mediaKey(), `ourleads-media-v1:${file}`).slice(0, 32);
 }
 
 export function isMediaSig(file: string, sig: string): boolean {

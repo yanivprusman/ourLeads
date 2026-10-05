@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const user = userByLink(p.get("u") ?? "", Number(p.get("exp")), p.get("sig") ?? "");
   if (!user) return new Response(null, { status: 303, headers: { Location: "/signin/expired" } });
   return new Response(
-    '<!doctype html><meta charset="utf-8"><title>outLeads</title><script>location.replace("/")</script>',
+    '<!doctype html><meta charset="utf-8"><title>ourLeads</title><script>location.replace("/")</script>',
     {
       headers: {
         "Content-Type": "text/html; charset=utf-8",

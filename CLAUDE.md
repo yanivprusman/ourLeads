@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# outLeads
+# ourLeads
 
 Shared lead board for the partnership with **Dudu (בסיס עבודות בגובה, 053-332-5272, basis-s.co.il)**
 and **Israel (סנפלינג ישראל, 052-540-7778, s-israel.co.il)**. The split Dudu set on 2026-10-05:
@@ -9,7 +9,7 @@ building and facade work goes to Basis; pigeons and windows go to Israel.
 ## How leads get in
 - `instrumentation.ts` starts `lib/ingest.ts`. Every 20 s it reads both private chats from the
   leader's WhatsApp bridge (`/api/dbquery`, `/api/download`, `/api/mediafile`). It is **read-only
-  and never sends**. Messages are stored as `pending` in `$OUTLEADS_DATA_DIR/outleads.sqlite`.
+  and never sends**. Messages are stored as `pending` in `$OURLEADS_DATA_DIR/ourleads.sqlite`.
 - A chat's batch is processed once the chat has been quiet for 2 min, or once the oldest pending
   message is 8 min old (a live conversation is never quiet). Voice notes go to whisperd. Then
   `claude -p` (`lib/claude.ts`) groups the burst into leads, using `--json-schema` structured output.
@@ -24,7 +24,7 @@ building and facade work goes to Basis; pigeons and windows go to Israel.
 note. Each change is logged in `events` with who said it.
 
 ## Auth
-`OUTLEADS_USERS` in `.env.local` holds one token per partner. The phone sends it as a bearer
+`OURLEADS_USERS` in `.env.local` holds one token per partner. The phone sends it as a bearer
 token, baked in from `mobile/.env`. A browser signs in with the access code, or with a link from
 `node scripts/make-link.mjs <user> [minutes] [origin]`, and then holds an HMAC cookie. Media is
 served by signed URL (`/api/media/<file>?sig=`).

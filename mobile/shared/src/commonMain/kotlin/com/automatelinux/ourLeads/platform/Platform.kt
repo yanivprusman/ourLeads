@@ -1,4 +1,4 @@
-package com.automatelinux.outLeads.platform
+package com.automatelinux.ourLeads.platform
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap

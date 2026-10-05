@@ -1,4 +1,4 @@
-package com.automatelinux.outLeads.ui.theme
+package com.automatelinux.ourLeads.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme

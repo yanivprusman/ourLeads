@@ -16,10 +16,10 @@
     </queries>
 
     <application
-        android:name=".OutLeadsApp"
+        android:name=".OurLeadsApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="outLeads"
+        android:label="ourLeads"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"

@@ -39,13 +39,13 @@ const OWNER = "יניב";
 
 let running = false;
 const backoffUntil = new Map<string, number>();
-const log = (...a: unknown[]) => console.log("[outleads/ingest]", ...a);
+const log = (...a: unknown[]) => console.log("[ourleads/ingest]", ...a);
 
 export function startIngest(): void {
-  const g = globalThis as unknown as { __outleadsIngest?: NodeJS.Timeout };
-  if (g.__outleadsIngest) return;
+  const g = globalThis as unknown as { __ourleadsIngest?: NodeJS.Timeout };
+  if (g.__ourleadsIngest) return;
   log("started: polling", SOURCES.map((s) => s.label).join(", "));
-  g.__outleadsIngest = setInterval(() => void tick(), POLL_MS);
+  g.__ourleadsIngest = setInterval(() => void tick(), POLL_MS);
   void tick();
 }
 

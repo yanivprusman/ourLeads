@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Print a link that signs a browser in to outLeads as one partner.
+ * Print a link that signs a browser in to ourLeads as one partner.
  *
  *   node scripts/make-link.mjs yaniv                        # 10 minutes, this machine's dev port
- *   node scripts/make-link.mjs dudu 1440 https://outleads.prod.ya-niv.com
+ *   node scripts/make-link.mjs dudu 1440 https://ourleads.prod.ya-niv.com
  *
  * The link carries a signature over the partner id and its own expiry — not
  * the partner's token — so it is safe to send over WhatsApp, and worthless once
@@ -26,12 +26,12 @@ const minutes = Number(minutesArg ?? 10);
 if (!(minutes > 0)) fail(`bad minutes: ${minutesArg}`);
 
 const env = readFileSync(path.join(appDir, ".env.local"), "utf8");
-const line = env.split("\n").find((l) => l.startsWith("OUTLEADS_USERS="));
-if (!line) fail("OUTLEADS_USERS is not set in .env.local");
-const users = JSON.parse(line.slice("OUTLEADS_USERS=".length));
+const line = env.split("\n").find((l) => l.startsWith("OURLEADS_USERS="));
+if (!line) fail("OURLEADS_USERS is not set in .env.local");
+const users = JSON.parse(line.slice("OURLEADS_USERS=".length));
 const u = users[user];
 if (!u?.token) fail(`no user "${user}" (have: ${Object.keys(users).join(", ")})`);
 
 const exp = Math.floor(Date.now() / 1000) + Math.round(minutes * 60);
-const sig = createHmac("sha256", u.token).update(`outleads-web-link-v1:${exp}`).digest("hex");
+const sig = createHmac("sha256", u.token).update(`ourleads-web-link-v1:${exp}`).digest("hex");
 console.log(`${origin.replace(/\/$/, "")}/api/session/link?u=${encodeURIComponent(user)}&exp=${exp}&sig=${sig}`);

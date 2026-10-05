@@ -6,7 +6,7 @@ import FeedbackChatMount from "./FeedbackChatMount";
 const heebo = Heebo({ subsets: ["hebrew", "latin"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
-  title: "outLeads",
+  title: "ourLeads",
   description: "לידים מדודו (בסיס) ומישראל (סנפלינג ישראל) — לוח משותף, עדכון סטטוס בקול",
 };
 

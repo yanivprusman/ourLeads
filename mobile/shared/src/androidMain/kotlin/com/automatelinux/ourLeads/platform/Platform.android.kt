@@ -1,4 +1,4 @@
-package com.automatelinux.outLeads.platform
+package com.automatelinux.ourLeads.platform
 
 import android.Manifest
 import android.content.Context

@@ -21,6 +21,6 @@ dependencyResolutionManagement {
 
 includeBuild("build-logic")
 
-rootProject.name = "outLeads"
+rootProject.name = "ourLeads"
 include(":shared")
 include(":app")

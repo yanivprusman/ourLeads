@@ -1,4 +1,4 @@
-package com.automatelinux.outLeads
+package com.automatelinux.ourLeads
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

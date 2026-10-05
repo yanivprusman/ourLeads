@@ -1,4 +1,4 @@
-package com.automatelinux.outLeads.data
+package com.automatelinux.ourLeads.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
