@@ -112,18 +112,6 @@ export function when(iso: string | null): string {
   return d.toLocaleString("he-IL", sameDay ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-/**
- * How long a NEW lead has been waiting for a first call. Dudu: "the hotter it is, the more
- * money it is — the colder it gets, the less." So this is the number on a new card, not a date.
- */
-export function heat(lead: Lead, now: number): { label: string; level: 0 | 1 | 2 } | null {
-  if (lead.status !== "new") return null;
-  const mins = Math.max(0, Math.round((now - new Date(lead.lastMessageAt ?? lead.createdAt).getTime()) / 60000));
-  const label =
-    mins < 1 ? "עכשיו" : mins < 60 ? `${mins} דק׳` : mins < 48 * 60 ? `${Math.floor(mins / 60)} שע׳` : `${Math.floor(mins / 1440)} ימים`;
-  return { label, level: mins < 60 ? 0 : mins < 6 * 60 ? 1 : 2 };
-}
-
 export function prettyPhone(p: string): string {
   const d = p.replace(/\D/g, "");
   return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3)}` : p;

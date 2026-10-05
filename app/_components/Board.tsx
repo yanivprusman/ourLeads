@@ -10,7 +10,6 @@ import {
   PIPELINE,
   SIDE,
   STATUS_TONE,
-  heat,
   intlPhone,
   margin,
   shekel,
@@ -30,7 +29,6 @@ export default function Board() {
   const [source, setSource] = useState<string>("all");
   const [openId, setOpenId] = useState<number | null>(null);
   const [reply, setReply] = useState<CommandReply | null>(null);
-  const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     try {
@@ -42,7 +40,6 @@ export default function Board() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       setData(json);
-      setNow(Date.now());
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -177,13 +174,13 @@ export default function Board() {
           <>
             <SectionHead title="מחכים לשיחה ראשונה" hint="כמה זמן כל ליד מחכה — ליד חם שווה יותר" />
             {fresh.map((l) => (
-              <LeadCard key={l.id} lead={l} data={data} now={now} onOpen={() => setOpenId(l.id)} />
+              <LeadCard key={l.id} lead={l} data={data} onOpen={() => setOpenId(l.id)} />
             ))}
             {rest.length > 0 && <SectionHead title="בטיפול" />}
           </>
         )}
         {rest.map((l) => (
-          <LeadCard key={l.id} lead={l} data={data} now={now} onOpen={() => setOpenId(l.id)} />
+          <LeadCard key={l.id} lead={l} data={data} onOpen={() => setOpenId(l.id)} />
         ))}
         {leads.length === 0 && (
           <div className="text-center py-16 text-muted">
@@ -197,7 +194,7 @@ export default function Board() {
         )}
       </div>
 
-      {open && <LeadDetail lead={open} data={data} now={now} onClose={() => setOpenId(null)} onChanged={load} />}
+      {open && <LeadDetail lead={open} data={data} onClose={() => setOpenId(null)} onChanged={load} />}
 
       <VoiceDock
         reply={reply}
@@ -269,9 +266,8 @@ function PartnerBadge({ source, data }: { source: string; data: BoardData }) {
   );
 }
 
-function LeadCard({ lead: l, data, now, onOpen }: { lead: Lead; data: BoardData; now: number; onOpen: () => void }) {
+function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOpen: () => void }) {
   const tone = STATUS_TONE[l.status];
-  const h = heat(l, now);
   const thumb = l.messages.find((m) => m.mediaType === "image" && m.mediaUrl)?.mediaUrl;
   const phone = l.phones[0];
   const faded = l.status === "lost" || l.status === "done";
@@ -285,18 +281,7 @@ function LeadCard({ lead: l, data, now, onOpen }: { lead: Lead; data: BoardData;
           <div className="flex items-center gap-2">
             <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${tone.pill}`}>{l.statusLabel}</span>
             <PartnerBadge source={l.source} data={data} />
-            {h ? (
-              <span
-                className={`ms-auto rounded-full px-2 py-0.5 text-[11.5px] font-bold tabular-nums ${
-                  h.level === 0 ? "bg-amber text-white" : h.level === 1 ? "bg-amber-soft text-[#8a4a0b]" : "bg-[#fde8e8] text-[#9b1c1c]"
-                }`}
-                title="כמה זמן הליד מחכה לשיחה ראשונה"
-              >
-                🔥 {h.label}
-              </span>
-            ) : (
-              <span className="ms-auto text-xs text-muted tabular-nums">{when(l.lastMessageAt ?? l.createdAt)}</span>
-            )}
+            <span className="ms-auto text-xs text-muted tabular-nums">{when(l.lastMessageAt ?? l.createdAt)}</span>
           </div>
           <h3 className="font-bold text-[17px] leading-snug mt-2">{l.title}</h3>
           <p className="text-sm text-muted mt-0.5 truncate">

@@ -132,20 +132,6 @@ private fun short(iso: String?): String {
     else "${t.dayOfMonth}.${t.monthNumber} ${two(t.hour)}:${two(t.minute)}"
 }
 
-/** How long a NEW lead has waited for a first call. A hot lead is worth more money. */
-private fun heat(l: Lead): Pair<String, Int>? {
-    if (l.status != "new") return null
-    val since = instant(l.lastMessageAt ?: l.createdAt) ?: return null
-    val mins = ((Clock.System.now() - since).inWholeMinutes).coerceAtLeast(0)
-    val label = when {
-        mins < 1 -> "עכשיו"
-        mins < 60 -> "$mins דק׳"
-        mins < 48 * 60 -> "${mins / 60} שע׳"
-        else -> "${mins / 1440} ימים"
-    }
-    return label to if (mins < 60) 0 else if (mins < 360) 1 else 2
-}
-
 private fun prettyPhone(p: String) = if (p.length == 10) "${p.take(3)}-${p.drop(3)}" else p
 private fun intlPhone(p: String) = if (p.startsWith("0")) "972" + p.drop(1) else p
 private fun String.encodeUrl(): String = buildString {
@@ -412,7 +398,6 @@ private fun Pill(text: String, bg: Color, fg: Color, strike: Boolean = false) =
 private fun LeadCard(d: BoardData, l: Lead, onClick: () -> Unit) {
     val uri = LocalUriHandler.current
     val t = tone(l.status)
-    val h = heat(l)
     val thumb = l.messages.firstOrNull { it.mediaType == "image" && it.mediaUrl != null }?.mediaUrl
     val phone = l.phones.firstOrNull()
     val faded = l.status in CLOSED
@@ -430,10 +415,7 @@ private fun LeadCard(d: BoardData, l: Lead, onClick: () -> Unit) {
                         Spacer(Modifier.width(8.dp))
                         PartnerBadge(l.source, d.sources.firstOrNull { it.id == l.source }?.label)
                         Spacer(Modifier.weight(1f))
-                        if (h != null) {
-                            val (bg, fg) = when (h.second) { 0 -> Amber to Color.White; 1 -> AmberSoft to Color(0xFF8A4A0B); else -> Color(0xFFFDE8E8) to Danger }
-                            Pill("🔥 ${h.first}", bg, fg)
-                        } else T(short(l.lastMessageAt ?: l.createdAt), 12, color = Muted)
+                        T(short(l.lastMessageAt ?: l.createdAt), 12, color = Muted)
                     }
                     T(l.title, 17, FontWeight.Bold, modifier = Modifier.padding(top = 8.dp), maxLines = 2, lineHeight = 22)
                     val sub = listOfNotNull(l.customerName, l.city).joinToString(" · ").ifEmpty { l.trade ?: "" }
@@ -508,7 +490,6 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     val photos = l.messages.filter { it.mediaType == "image" && it.mediaUrl != null }.map { it.mediaUrl!! }
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val step = PIPELINE.indexOf(l.status)
-    val h = heat(l)
 
     fun change(status: String?) {
         if (busy) return
@@ -547,7 +528,6 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                             }
                             Spacer(Modifier.width(6.dp))
                             T("${src?.label ?: ""} · #${l.id}", 12, color = Color.White.copy(alpha = .8f))
-                            if (h != null) { Spacer(Modifier.width(8.dp)); Pill("🔥 מחכה ${h.first}", Amber, Color.White) }
                         }
                         T(l.title, 24, FontWeight.ExtraBold, Color.White, Modifier.padding(top = 6.dp), lineHeight = 30)
                         val sub = listOfNotNull(l.customerName, place.ifEmpty { null }).joinToString(" · ")

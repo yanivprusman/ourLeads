@@ -8,7 +8,6 @@ import {
   PIPELINE,
   SIDE,
   STATUS_TONE,
-  heat,
   intlPhone,
   prettyPhone,
   wazeUrl,
@@ -24,13 +23,11 @@ type Item = { at: string; kind: "msg"; m: Msg } | { at: string; kind: "event"; e
 export default function LeadDetail({
   lead,
   data,
-  now,
   onClose,
   onChanged,
 }: {
   lead: Lead;
   data: BoardData;
-  now: number;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -43,7 +40,6 @@ export default function LeadDetail({
   const place = [lead.address, lead.city].filter(Boolean).join(", ");
   const photos = lead.messages.filter((m) => m.mediaType === "image" && m.mediaUrl).map((m) => m.mediaUrl!);
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
-  const h = heat(lead, now);
   const step = PIPELINE.indexOf(lead.status);
 
   useEffect(() => {
@@ -106,7 +102,6 @@ export default function LeadDetail({
                 {PARTNER_TONE[lead.source]?.initial}
               </span>
               {source?.label} · #{lead.id}
-              {h && <span className="rounded-full bg-amber text-white px-2 py-0.5 font-bold">🔥 מחכה {h.label}</span>}
             </div>
             <h2 className="text-2xl font-extrabold leading-tight mt-1.5">{lead.title}</h2>
             {(lead.customerName || place) && (
