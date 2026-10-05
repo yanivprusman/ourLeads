@@ -1,0 +1,7 @@
+{
+  "description": "outLeads — leads Dudu (Basis) and Israel send on WhatsApp become cards; say a lead's status by voice. Shared partnership board.",
+  "icon": "ClipboardList",
+  "sharedLibs": [
+    "android-feedback-lib"
+  ]
+}
