@@ -1,3 +1,17 @@
 @import "tailwindcss";
 @source "../../../automateLinux/packages/feedback-lib/src";
 @source "../../../automateLinux/packages/feedback-lib-launcher/src";
+
+@theme {
+  --font-sans: var(--font-heebo), system-ui, sans-serif;
+  --color-ink: #16202b;
+  --color-muted: #5d6b7a;
+  --color-line: #e3e8ee;
+  --color-paper: #f5f7f9;
+  --color-brand: #1f5f8b;
+  --color-brand-ink: #134563;
+}
+
+html, body { background: var(--color-paper); color: var(--color-ink); }
+body { -webkit-tap-highlight-color: transparent; }
+.no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
