@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="18 18 72 72">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1f74a3"/><stop offset=".55" stop-color="#14466b"/><stop offset="1" stop-color="#0b2236"/></linearGradient>
+<linearGradient id="back" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd3f4"/><stop offset="1" stop-color="#4fa6d6"/></linearGradient>
+<linearGradient id="card" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6eef5"/></linearGradient>
+<linearGradient id="amber" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd67e"/><stop offset="1" stop-color="#ef8a24"/></linearGradient>
+<filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.8" flood-color="#04121f" flood-opacity=".45"/></filter>
+</defs>
+<clipPath id="r"><rect x="18" y="18" width="72" height="72" rx="16"/></clipPath><g clip-path="url(#r)"><rect width="108" height="108" fill="url(#bg)"/>
+<!-- partner's message, behind -->
+<path d="M45 33a7 7 0 0 1 7-7h20a7 7 0 0 1 7 7v15a7 7 0 0 1-7 7h-1l1 7-8-7H52a7 7 0 0 1-7-7z" fill="url(#back)" opacity=".95"/>
+<!-- the lead card it became -->
+<g filter="url(#sh)">
+<path d="M29 46a8 8 0 0 1 8-8h27a8 8 0 0 1 8 8v20a8 8 0 0 1-8 8H48l-10 8 .8-8H37a8 8 0 0 1-8-8z" fill="url(#card)"/>
+</g>
+<rect x="36" y="46" width="22" height="5" rx="2.5" fill="#0d2a43"/>
+<rect x="36" y="55.5" width="13" height="4" rx="2" fill="#97adc0"/>
+<circle cx="62.5" cy="64" r="8.5" fill="url(#amber)"/>
+<path d="M58.6 64.2l2.7 2.8 5-5.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g></svg>

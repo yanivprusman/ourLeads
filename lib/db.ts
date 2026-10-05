@@ -169,12 +169,13 @@ export function addEvent(
   text: string | null,
   fromStatus: string | null = null,
   toStatus: string | null = null,
+  at: string = now(),
 ): void {
   getDb()
     .prepare(
       "INSERT INTO events (lead_id, at, who, kind, text, from_status, to_status) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
-    .run(leadId, now(), who, kind, text, fromStatus, toStatus);
+    .run(leadId, at, who, kind, text, fromStatus, toStatus);
 }
 
 /** Leads still on someone's plate, newest activity first — what the extractor

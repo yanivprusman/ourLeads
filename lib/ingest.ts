@@ -333,7 +333,9 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
           lastAt(ids),
         );
       const leadId = Number(r.lastInsertRowid);
-      addEvent(leadId, src.partner, "created", c.note ?? `ליד חדש מ${src.label}`, null, status);
+      // Dated by the partner's first message, not by when the server got round to reading it.
+      const firstAt = ids.map((i) => byId.get(i)!.sent_at).sort()[0];
+      addEvent(leadId, src.partner.split(" ")[0], "created", c.note ?? `ליד חדש מ${src.label}`, null, status, firstAt);
       for (const i of ids) {
         setMsg.run(leadId, "done", i, byId.get(i)!.chat_jid);
         touched.add(i);
@@ -345,7 +347,7 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
       const fromMe = ids.every((i) => byId.get(i)!.from_me);
       updateLead(
         a.leadId,
-        fromMe ? OWNER : src.partner,
+        fromMe ? OWNER : src.partner.split(" ")[0],
         toPatch(a),
         isStatus(a.status) ? a.status : null,
         a.note ?? "הודעות חדשות בוואטסאפ",

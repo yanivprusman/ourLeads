@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Mark from "./Mark";
 
 export default function SignIn({ linkExpired }: { linkExpired: boolean }) {
   const [code, setCode] = useState("");
@@ -21,17 +22,18 @@ export default function SignIn({ linkExpired }: { linkExpired: boolean }) {
   }
 
   return (
-    <main className="min-h-dvh grid place-items-center px-4">
-      <form onSubmit={submit} className="w-full max-w-sm bg-white border border-line rounded-2xl p-6 shadow-sm">
-        <h1 className="text-xl font-bold">ourLeads</h1>
-        <p className="text-muted text-sm mt-1">לוח הלידים המשותף. הזינו את קוד הגישה שקיבלתם.</p>
+    <main className="min-h-dvh band grid place-items-center px-4">
+      <form onSubmit={submit} className="rise w-full max-w-sm bg-white rounded-3xl p-7 shadow-2xl">
+        <Mark className="size-14" />
+        <h1 className="text-2xl font-extrabold mt-4">ourLeads</h1>
+        <p className="text-muted text-sm mt-1">הלידים של השותפות במקום אחד — מהוואטסאפ ישר ללוח.</p>
         <input
           data-id="signin-code"
           type="password"
           autoComplete="current-password"
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          className="mt-4 w-full rounded-lg border border-line px-3 py-2.5 text-base outline-none focus:border-brand"
+          className="mt-4 w-full rounded-xl border border-line px-4 py-3 text-base outline-none focus:border-harbour-2"
           placeholder="קוד גישה"
           dir="ltr"
         />
@@ -39,7 +41,7 @@ export default function SignIn({ linkExpired }: { linkExpired: boolean }) {
         <button
           data-id="signin-submit"
           disabled={busy || !code}
-          className="mt-4 w-full rounded-lg bg-brand text-white py-2.5 font-medium hover:bg-brand-ink active:scale-[.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="mt-4 w-full rounded-xl bg-harbour text-white py-3 font-semibold hover:bg-harbour-2 active:scale-[.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           כניסה
         </button>

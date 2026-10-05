@@ -50,15 +50,25 @@ export interface BoardData {
   pending: number;
 }
 
-export const STATUS_STYLE: Record<string, string> = {
-  new: "bg-sky-100 text-sky-900",
-  contacted: "bg-indigo-100 text-indigo-900",
-  visit_scheduled: "bg-amber-100 text-amber-900",
-  quoted: "bg-violet-100 text-violet-900",
-  won: "bg-emerald-100 text-emerald-900",
-  done: "bg-slate-200 text-slate-700",
-  on_hold: "bg-orange-100 text-orange-900",
-  lost: "bg-rose-100 text-rose-900",
+/** The main road a lead travels. on_hold and lost are side exits, done is the end. */
+export const PIPELINE = ["new", "contacted", "visit_scheduled", "quoted", "won", "done"];
+export const SIDE = ["on_hold", "lost"];
+export const CLOSED = ["done", "lost"];
+
+export const STATUS_TONE: Record<string, { dot: string; pill: string; rail: string }> = {
+  new: { dot: "bg-amber", pill: "bg-amber-soft text-[#8a4a0b]", rail: "bg-amber" },
+  contacted: { dot: "bg-harbour-2", pill: "bg-[#e3f1fa] text-harbour", rail: "bg-harbour-2" },
+  visit_scheduled: { dot: "bg-[#6c5ce7]", pill: "bg-[#ecebfd] text-[#3f33a8]", rail: "bg-[#6c5ce7]" },
+  quoted: { dot: "bg-[#b0489a]", pill: "bg-[#f8e8f4] text-[#7d2a6b]", rail: "bg-[#b0489a]" },
+  won: { dot: "bg-israel", pill: "bg-[#def5ec] text-[#0b5c47]", rail: "bg-israel" },
+  done: { dot: "bg-[#8a9aab]", pill: "bg-[#eceff3] text-ink-2", rail: "bg-[#8a9aab]" },
+  on_hold: { dot: "bg-[#b9c4cf]", pill: "bg-[#eef1f4] text-muted", rail: "bg-[#b9c4cf]" },
+  lost: { dot: "bg-[#d4dbe2]", pill: "bg-[#f3f5f7] text-[#8a9aab] line-through", rail: "bg-[#d4dbe2]" },
+};
+
+export const PARTNER_TONE: Record<string, { chip: string; initial: string }> = {
+  basis: { chip: "bg-basis text-white", initial: "ב" },
+  israel: { chip: "bg-israel text-white", initial: "י" },
 };
 
 export function when(iso: string | null): string {
@@ -69,6 +79,18 @@ export function when(iso: string | null): string {
   return d.toLocaleString("he-IL", sameDay ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * How long a NEW lead has been waiting for a first call. Dudu: "the hotter it is, the more
+ * money it is — the colder it gets, the less." So this is the number on a new card, not a date.
+ */
+export function heat(lead: Lead, now: number): { label: string; level: 0 | 1 | 2 } | null {
+  if (lead.status !== "new") return null;
+  const mins = Math.max(0, Math.round((now - new Date(lead.lastMessageAt ?? lead.createdAt).getTime()) / 60000));
+  const label =
+    mins < 1 ? "עכשיו" : mins < 60 ? `${mins} דק׳` : mins < 48 * 60 ? `${Math.floor(mins / 60)} שע׳` : `${Math.floor(mins / 1440)} ימים`;
+  return { label, level: mins < 60 ? 0 : mins < 6 * 60 ? 1 : 2 };
+}
+
 export function prettyPhone(p: string): string {
   const d = p.replace(/\D/g, "");
   return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3)}` : p;
@@ -77,4 +99,8 @@ export function prettyPhone(p: string): string {
 export function intlPhone(p: string): string {
   const d = p.replace(/\D/g, "");
   return d.startsWith("0") ? "972" + d.slice(1) : d;
+}
+
+export function wazeUrl(place: string): string {
+  return `https://waze.com/ul?q=${encodeURIComponent(place)}&navigate=yes`;
 }

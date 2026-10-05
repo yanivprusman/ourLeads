@@ -4,14 +4,38 @@
 
 @theme {
   --font-sans: var(--font-heebo), system-ui, sans-serif;
-  --color-ink: #16202b;
-  --color-muted: #5d6b7a;
-  --color-line: #e3e8ee;
-  --color-paper: #f5f7f9;
-  --color-brand: #1f5f8b;
-  --color-brand-ink: #134563;
+  --color-ink: #0d2a43;
+  --color-ink-2: #2b4258;
+  --color-muted: #637589;
+  --color-line: #e2e8ee;
+  --color-paper: #f3f6f9;
+  --color-harbour: #14466b;
+  --color-harbour-2: #1f74a3;
+  --color-sky: #8fd3f4;
+  --color-amber: #ef8a24;
+  --color-amber-soft: #fff1df;
+  --color-basis: #1f74a3;
+  --color-israel: #0f8a6a;
 }
 
 html, body { background: var(--color-paper); color: var(--color-ink); }
 body { -webkit-tap-highlight-color: transparent; }
-.no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* The brand band: the icon's blue, lit from the top-left. */
+.band { background: radial-gradient(120% 140% at 100% 0%, #1f74a3 0%, #14466b 45%, #0b2236 100%); }
+
+@keyframes ring { 0% { transform: scale(1); opacity: .55 } 100% { transform: scale(2.1); opacity: 0 } }
+.ring { animation: ring 1.4s ease-out infinite; }
+.ring.delay { animation-delay: .7s; }
+
+@keyframes rise { from { transform: translateY(12px); opacity: 0 } to { transform: none; opacity: 1 } }
+.rise { animation: rise .28s cubic-bezier(.2,.8,.2,1) both; }
+
+@keyframes slide-in { from { transform: translateX(-100%) } to { transform: none } }
+.sheet { animation: slide-in .28s cubic-bezier(.2,.8,.2,1) both; }
+[dir="rtl"] .sheet { animation-name: slide-in-rtl; }
+@keyframes slide-in-rtl { from { transform: translateX(-100%) } to { transform: none } }
+
+@media (prefers-reduced-motion: reduce) { .ring, .rise, .sheet { animation: none } }
