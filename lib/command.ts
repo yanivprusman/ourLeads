@@ -52,6 +52,49 @@ interface Answer {
   reply: string;
 }
 
+const s = { type: ["string", "null"] };
+const COMMAND_SCHEMA = {
+  type: "object",
+  properties: {
+    changes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          leadId: { type: "integer" },
+          status: s,
+          note: s,
+          nextStep: s,
+          visitAt: s,
+          customerName: s,
+          phones: { type: "array", items: { type: "string" } },
+        },
+        required: ["leadId"],
+      },
+    },
+    create: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          source: { type: "string" },
+          title: { type: "string" },
+          trade: s,
+          customerName: s,
+          phones: { type: "array", items: { type: "string" } },
+          address: s,
+          city: s,
+          details: s,
+          status: s,
+        },
+        required: ["source", "title"],
+      },
+    },
+    reply: { type: "string" },
+  },
+  required: ["changes", "create", "reply"],
+};
+
 function buildPrompt(said: string, who: string): string {
   return `אתה מנהל לוח לידים לשותפות עבודות גובה. ${who} אמר/ה עכשיו (תמלול של הקלטה, ייתכנו שגיאות שמיעה):
 """${said}"""
@@ -71,7 +114,7 @@ note: משפט קצר בגוף שלישי שמתעד מה נאמר, כולל מ�
 אם לא ברור לאיזה ליד הכוונה — אל תשנה כלום, ושאל ב-reply שאלה קצרה.
 reply: משפט אחד או שניים בעברית, שאומר בדיוק מה עודכן (שם הליד והסטטוס החדש).
 
-ענה ב-JSON בלבד:
+התשובה במבנה:
 {"changes":[{"leadId":1,"status":"visit_scheduled","note":"...","nextStep":null,"visitAt":"..."}],
  "create":[{"source":"basis","title":"...","trade":null,"customerName":null,"phones":[],"address":null,"city":null,"details":null,"status":"new"}],
  "reply":"..."}`;
@@ -83,7 +126,7 @@ export async function runCommand(said: string, who: string): Promise<CommandResu
   const d = getDb();
   let answer: Answer;
   try {
-    answer = await askJson<Answer>(buildPrompt(text, who));
+    answer = await askJson<Answer>(buildPrompt(text, who), COMMAND_SCHEMA);
   } catch (e) {
     d.prepare("INSERT INTO commands (at, who, said, error) VALUES (?, ?, ?, ?)").run(now(), who, text, (e as Error).message);
     throw e;

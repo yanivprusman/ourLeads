@@ -260,15 +260,43 @@ ${describeLeads()}
 הודעות חדשות (המזהה בסוגריים משולשים):
 ${msgs.map((m) => describeMessage(m, src.partner)).join("\n")}
 
-ענה ב-JSON בלבד, בלי טקסט נוסף, במבנה:
+התשובה במבנה הבא:
 {"create":[{"messageIds":["..."],"title":"...","trade":"...","customerName":null,"phones":[],"address":null,"city":null,"details":"...","nextStep":null,"visitAt":null,"status":"new","note":null}],
  "attach":[{"leadId":1,"messageIds":["..."],"status":null,"note":"...", "details":"..."}],
  "ignore":["..."]}
 כל מזהה הודעה מופיע בדיוק פעם אחת באחת הרשימות.`;
 }
 
+const str = { type: ["string", "null"] };
+const LEAD_FIELDS = {
+  title: { type: "string" },
+  trade: str,
+  customerName: str,
+  phones: { type: "array", items: { type: "string" } },
+  address: str,
+  city: str,
+  details: str,
+  nextStep: str,
+  visitAt: str,
+  status: str,
+  note: str,
+  messageIds: { type: "array", items: { type: "string" } },
+};
+const EXTRACT_SCHEMA = {
+  type: "object",
+  properties: {
+    create: { type: "array", items: { type: "object", properties: LEAD_FIELDS, required: ["title", "messageIds"] } },
+    attach: {
+      type: "array",
+      items: { type: "object", properties: { leadId: { type: "integer" }, ...LEAD_FIELDS }, required: ["leadId", "messageIds"] },
+    },
+    ignore: { type: "array", items: { type: "string" } },
+  },
+  required: ["create", "attach", "ignore"],
+};
+
 async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
-  const answer = await askJson<ExtractAnswer>(buildPrompt(src, msgs), path.join(dataDir(), "media"));
+  const answer = await askJson<ExtractAnswer>(buildPrompt(src, msgs), EXTRACT_SCHEMA, path.join(dataDir(), "media"));
   const d = getDb();
   const byId = new Map(msgs.map((m) => [m.id, m]));
   const setMsg = d.prepare("UPDATE messages SET lead_id = ?, state = ? WHERE id = ? AND chat_jid = ?");

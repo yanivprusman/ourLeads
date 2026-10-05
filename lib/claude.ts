@@ -20,7 +20,12 @@ const CLAUDE_BIN = "/root/.local/bin/claude";
 const MODEL = process.env.OUTLEADS_MODEL || "sonnet";
 const TIMEOUT_MS = 480_000;
 
-export async function askJson<T>(prompt: string, readDir?: string): Promise<T> {
+/**
+ * The answer is constrained by `schema` (`--json-schema`), so it arrives as
+ * parsed structured output rather than as text to dig JSON out of — free text
+ * broke on the first Hebrew abbreviation with a quote mark in it (מע"מ).
+ */
+export async function askJson<T>(prompt: string, schema: object, readDir?: string): Promise<T> {
   mkdirSync(WORK_DIR, { recursive: true });
   const raw = await new Promise<string>((resolve, reject) => {
     const child = execFile(
@@ -30,6 +35,8 @@ export async function askJson<T>(prompt: string, readDir?: string): Promise<T> {
         "--model", MODEL,
         "--tools", readDir ? "Read" : "",
         ...(readDir ? ["--allowedTools", "Read", "--add-dir", readDir] : []),
+        "--output-format", "json",
+        "--json-schema", JSON.stringify(schema),
         "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
         "--setting-sources", "",
@@ -54,12 +61,13 @@ export async function askJson<T>(prompt: string, readDir?: string): Promise<T> {
     );
     child.stdin?.end(prompt, "utf8");
   });
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error(`Claude did not return JSON: ${raw.trim().slice(0, 200)}`);
+  let envelope: { is_error?: boolean; result?: string; structured_output?: T };
   try {
-    return JSON.parse(raw.slice(start, end + 1)) as T;
+    envelope = JSON.parse(raw);
   } catch {
-    throw new Error(`Claude returned broken JSON: ${raw.trim().slice(0, 200)}`);
+    throw new Error(`Claude CLI did not return its JSON envelope: ${raw.trim().slice(0, 200)}`);
   }
+  if (envelope.is_error || envelope.structured_output === undefined)
+    throw new Error(`Claude gave no structured answer: ${String(envelope.result ?? "").slice(0, 300)}`);
+  return envelope.structured_output;
 }

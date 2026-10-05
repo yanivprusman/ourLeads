@@ -83,7 +83,7 @@ export default function VoiceBar({ onDone }: { onDone: (r: CommandReply) => void
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-line">
-      <div className="max-w-3xl mx-auto px-4 py-3">
+      <div className="max-w-3xl mx-auto ps-4 pe-16 py-3">
         {error && <p className="text-red-700 text-sm mb-2">{error}</p>}
         <form
           className="flex items-center gap-2"
