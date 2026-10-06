@@ -285,7 +285,7 @@ private fun LeadList(
     d: BoardData, error: String?, view: String, source: String, ball: String, mode: String,
     onView: (String) -> Unit, onSource: (String) -> Unit, onBall: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
-    val inSource = d.leads.filter { (source == "all" || it.source == source) && (ball == "all" || it.holder == ball) }
+    val inSource = d.leads.filter { (source == "all" || it.source == source) && (ball == "all" || if (ball == NOBODY) it.holder == null else it.holder == ball) }
     val leads = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
@@ -337,7 +337,7 @@ private fun LeadList(
             if (d.people.isNotEmpty()) Row(
                 Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
             ) {
-                (listOf("all" to "הכל") + d.people.map { it.id to holderLabel(d, it.id) }).forEach { (id, label) ->
+                (listOf("all" to "הכל") + d.people.map { it.id to holderLabel(d, it.id) } + (NOBODY to "אצל אף אחד")).forEach { (id, label) ->
                     val sel = id == ball
                     T(
                         label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f),
@@ -835,6 +835,9 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
         dismissButton = { TextButton(onDismiss) { Text("ביטול", color = Muted) } },
     )
 }
+
+/** The ball filter for leads nobody has taken yet — not a user id (ids come from OURLEADS_USERS). */
+private const val NOBODY = "nobody"
 
 private fun holderLabel(d: BoardData, id: String): String =
     if (id == d.me.id) "אצלי" else "אצל ${d.people.firstOrNull { it.id == id }?.name ?: id}"

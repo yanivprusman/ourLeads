@@ -19,6 +19,9 @@ import {
   type Lead,
 } from "./types";
 
+/** The ball filter for leads nobody has taken yet — not a user id (ids come from OURLEADS_USERS). */
+const NOBODY = "nobody";
+
 type View = "open" | string;
 
 export default function Board() {
@@ -55,7 +58,7 @@ export default function Board() {
   }, [load]);
 
   const inSource = useMemo(
-    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (ball === "all" || l.holder === ball)),
+    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (ball === "all" || (ball === NOBODY ? !l.holder : l.holder === ball))),
     [data, source, ball],
   );
   const counts = useMemo(() => {
@@ -135,7 +138,7 @@ export default function Board() {
             ))}
           </div>
           <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
-            {[{ id: "all", label: "הכל" }, ...data.people.map((p) => ({ id: p.id, label: holderLabel(data, p.id) }))].map((p) => (
+            {[{ id: "all", label: "הכל" }, ...data.people.map((p) => ({ id: p.id, label: holderLabel(data, p.id) })), { id: NOBODY, label: "אצל אף אחד" }].map((p) => (
               <button
                 key={p.id}
                 data-id={`filter-holder-${p.id}`}
