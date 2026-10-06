@@ -70,9 +70,8 @@ export default function Board() {
     );
 
   const leads = inSource.filter((l) => (view === "open" ? !CLOSED.includes(l.status) : l.status === view));
-  // Nothing done yet goes first, longest-waiting on top.
-  const fresh = view === "open" ? leads.filter((l) => l.status === "none").sort((a, b) => (a.lastMessageAt ?? a.createdAt).localeCompare(b.lastMessageAt ?? b.createdAt)) : [];
-  const rest = view === "open" ? leads.filter((l) => l.status !== "none") : leads;
+  // One list in the server's order (latest message first). Status never reorders it:
+  // marking a lead פגישה or עבודה must not make it jump away from where the user tapped it.
   const open = data.leads.find((l) => l.id === openId) ?? null;
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
   const openCount = inSource.filter((l) => !CLOSED.includes(l.status)).length;
@@ -164,14 +163,7 @@ export default function Board() {
           <Calendar data={{ ...data, leads: inSource }} onOpen={(id) => setOpenId(id)} />
         ) : (
           <>
-        {fresh.length > 0 && (
-          <>
-            {fresh.map((l) => (
-              <LeadCard key={l.id} lead={l} data={data} onOpen={() => setOpenId(l.id)} />
-            ))}
-          </>
-        )}
-        {rest.map((l) => (
+        {leads.map((l) => (
           <LeadCard key={l.id} lead={l} data={data} onOpen={() => setOpenId(l.id)} />
         ))}
         {leads.length === 0 && (

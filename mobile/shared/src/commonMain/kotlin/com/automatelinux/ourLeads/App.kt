@@ -275,8 +275,6 @@ private fun LeadList(
 ) {
     val inSource = d.leads.filter { source == "all" || it.source == source }
     val leads = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
-    val fresh = if (view == "open") leads.filter { it.status == "none" }.sortedBy { it.lastMessageAt ?: it.createdAt } else emptyList()
-    val rest = if (view == "open") leads.filter { it.status != "none" } else leads
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
 
@@ -345,9 +343,9 @@ private fun LeadList(
         item { header() }
         if (error != null) item { T(error, 14, color = Danger, modifier = Modifier.padding(18.dp, 12.dp)) }
         item { Spacer(Modifier.height(8.dp)) }
-        // New leads first, oldest first — no heading; the חדש tile already names them.
-        items(fresh, key = { it.id }) { LeadCard(d, it, onReply, onError) { onOpen(it.id) } }
-        items(rest, key = { it.id }) { LeadCard(d, it, onReply, onError) { onOpen(it.id) } }
+        // One list in the server's order (latest message first). Status never reorders it:
+        // marking a lead פגישה or עבודה must not make it jump away from where the user tapped it.
+        items(leads, key = { it.id }) { LeadCard(d, it, onReply, onError) { onOpen(it.id) } }
         if (leads.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 LocalMark.current(Modifier.size(52.dp).alpha(.3f))
