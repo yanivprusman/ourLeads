@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ChatIcon, PhoneIcon } from "./Board";
 import DealCard from "./DealCard";
 import ScheduleCard from "./ScheduleCard";
+import ShareCard from "./ShareCard";
 import {
   PARTNER_TONE,
   STATES,
@@ -34,6 +35,7 @@ export default function LeadDetail({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const source = data.sources.find((s) => s.id === lead.source);
   const partner = source?.actor ?? "שותף";
   const place = [lead.address, lead.city].filter(Boolean).join(", ");
@@ -41,10 +43,10 @@ export default function LeadDetail({
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && (photo ? setPhoto(null) : onClose());
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && (photo ? setPhoto(null) : sharing ? setSharing(false) : onClose());
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [photo, onClose]);
+  }, [photo, sharing, onClose]);
 
   async function patch(body: Record<string, unknown>): Promise<boolean> {
     setBusy(true);
@@ -113,6 +115,15 @@ export default function LeadDetail({
             aria-label="סגירה"
           >
             ×
+          </button>
+          <button
+            data-id="lead-share"
+            onClick={() => setSharing(true)}
+            className="absolute top-3 end-15 h-10 px-4 rounded-full bg-black/35 hover:bg-black/55 backdrop-blur flex items-center gap-1.5 text-sm font-semibold cursor-pointer transition"
+            title="שליחת הכרטיס בקישור — וואטסאפ, מייל, כל אחד"
+          >
+            <ShareIcon />
+            שתף
           </button>
         </div>
 
@@ -268,6 +279,8 @@ export default function LeadDetail({
         </section>
       </aside>
 
+      {sharing && <ShareCard lead={lead} onClose={() => setSharing(false)} onChanged={onChanged} />}
+
       {photo && (
         <button
           data-id="photo-close"
@@ -418,6 +431,17 @@ function EventRow({ e }: { e: LeadEvent }) {
       )}
       {e.text && <p className="text-ink-2 mt-0.5 leading-relaxed">{e.text}</p>}
     </li>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+    </svg>
   );
 }
 

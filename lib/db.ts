@@ -128,6 +128,18 @@ export function getDb(): DatabaseSync {
       exp INTEGER NOT NULL,
       used_at TEXT NOT NULL
     );
+    -- A lead card sent outside the board (lib/shares.ts): the link carries this
+    -- random token, and what the sender chose to hide lives here, not in the URL,
+    -- so whoever holds the link cannot ask for more.
+    CREATE TABLE IF NOT EXISTS shares (
+      token TEXT PRIMARY KEY,
+      lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+      hide TEXT NOT NULL DEFAULT '[]',
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      revoked_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS shares_lead ON shares(lead_id);
   `);
   // The deal: what the client pays, and what the subcontractor who does it gets.
   // Added after the first leads existed, so it is a migration, not part of CREATE.

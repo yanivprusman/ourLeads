@@ -107,6 +107,13 @@ export const SOURCES: Source[] = [
   },
 ];
 
+/**
+ * Where a shared lead card is opened. Always prod, even when the link is made on
+ * dev: the card goes to people who have no dev access (Dudu, a subcontractor),
+ * and both servers read the one shared board, so the token is valid on either.
+ */
+export const CARD_ORIGIN = "https://our-leads.prod.ya-niv.com";
+
 export function sourceByJid(jid: string): Source | undefined {
   return SOURCES.find((s) => s.jid === jid);
 }
