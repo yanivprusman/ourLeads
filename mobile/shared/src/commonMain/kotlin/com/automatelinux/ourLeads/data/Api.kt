@@ -62,9 +62,9 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
-    /** Pass the ball: the lead is now in [holder]'s hands (a user id). */
-    suspend fun setHolder(leadId: Int, holder: String): Result<Unit> {
-        val body = JsonObject(mapOf("holder" to JsonPrimitive(holder))).toString().encodeToByteArray()
+    /** Pass the ball: the lead is now in [holder]'s hands (a user id or "customer"); null = nobody's. */
+    suspend fun setHolder(leadId: Int, holder: String?): Result<Unit> {
+        val body = JsonObject(mapOf("holder" to (holder?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull))).toString().encodeToByteArray()
         val r = httpRequest("POST", "$base/api/leads/$leadId", token, body, "application/json; charset=utf-8")
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }

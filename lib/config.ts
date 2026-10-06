@@ -71,7 +71,8 @@ export function users(): User[] {
     token: String(u.token ?? "").trim(),
   }));
   for (const u of list) {
-    if (u.id === CUSTOMER.id) throw new Error(`OURLEADS_USERS may not use the id "${CUSTOMER.id}" — it means the customer holds the ball`);
+    if (u.id === CUSTOMER.id || u.id === "nobody")
+      throw new Error(`OURLEADS_USERS may not use the id "${u.id}" — it is a place the ball can be, not a person`);
     if (!u.name || u.token.length < 24)
       throw new Error(`OURLEADS_USERS.${u.id} needs a name and a token of at least 24 characters`);
   }

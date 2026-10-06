@@ -250,16 +250,18 @@ export default function LeadDetail({
             <div className="bg-white rounded-2xl border border-line p-3 space-y-2.5">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-ink-2 px-1">הכדור אצל</span>
-                <div className="flex-1 grid gap-1 rounded-xl bg-paper p-1" style={{ gridTemplateColumns: `repeat(${data.people.length + 1}, minmax(0, 1fr))` }}>
-                  {[...data.people, data.customer].map((p) => (
+                <div className="flex-1 grid gap-1 rounded-xl bg-paper p-1" style={{ gridTemplateColumns: `repeat(${data.people.length + 2}, minmax(0, 1fr))` }}>
+                  {[...data.people, data.customer, { id: null, name: "אף אחד" }].map((p) => (
                     <button
-                      key={p.id}
-                      data-id={`lead-holder-${p.id}`}
+                      key={p.id ?? "nobody"}
+                      data-id={`lead-holder-${p.id ?? "nobody"}`}
                       disabled={busy}
-                      onClick={() => p.id !== lead.holder && !busy && patch({ holder: p.id })}
+                      onClick={() => p.id !== (lead.holder ?? null) && !busy && patch({ holder: p.id })}
                       className={`rounded-lg py-2 text-sm transition cursor-pointer disabled:cursor-wait ${
-                        p.id === lead.holder
-                          ? p.id === data.customer.id
+                        p.id === (lead.holder ?? null)
+                          ? p.id === null
+                            ? "bg-white text-ink font-bold shadow-sm"
+                            : p.id === data.customer.id
                             ? "bg-amber text-white font-bold shadow-sm"
                             : "bg-harbour text-white font-bold shadow-sm"
                           : "text-muted hover:text-ink hover:bg-white"

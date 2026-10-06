@@ -164,6 +164,7 @@ details: רק כשנאמר תיאור חדש של העבודה שמחליף את
 "תעביר לדודו" / "תעביר את הליד לדודו" / "זה אצל דודו עכשיו" → holder "dudu". "תעביר אליי" / "זה אצלי" / "אני לוקח את זה" → holder "${who.id}".
 הכדור אצל הלקוח — כשמחכים לו (שיחשוב על המחיר, ישלח תמונות, יאשר תאריך) → holder "customer", ואז אחרי כמה ימים שנינו בודקים איתו.
 checkBackAt: היום שבו בודקים איתו, "YYYY-MM-DD". "הכדור אצל הלקוח" / "מחכים לו" בלי זמן → checkBackAt null (ברירת המחדל ${CUSTOMER_DAYS} ימים). "תבדוק איתו ביום ראשון" / "נחזור אליו בעוד שבוע" → התאריך הזה.
+"זה לא אצל אף אחד" / "תוריד את הכדור" / "אף אחד לא מטפל בזה" → holder "nobody".
 העברה בלבד אינה משנה status ואינה דורשת note.
 יומן (${todayLine()}):
 - meetingAt: פגישה/ביקור אצל לקוח שעוד אין איתו חוזה, "YYYY-MM-DDTHH:MM" שעון ישראל. "חמישי בעשר" = יום חמישי הקרוב 10:00.
@@ -231,10 +232,10 @@ export async function runCommand(said: string, user: { id: string; name: string 
     const status = isStatus(c.status) ? c.status : null;
     const ballTo = [...people, CUSTOMER];
     const checkBack = cleanDate(c.checkBackAt);
-    const holder = c.holder ? ballTo.find((u) => u.id === c.holder) : checkBack ? CUSTOMER : undefined;
-    if (holder) setHolder(c.leadId, who, holder, ballTo.find((u) => u.id === before.holder)?.name ?? null, holder.id === CUSTOMER.id ? checkBack : null);
+    const holder = c.holder === "nobody" ? null : c.holder ? ballTo.find((u) => u.id === c.holder) : checkBack ? CUSTOMER : undefined;
+    if (holder !== undefined) setHolder(c.leadId, who, holder, ballTo.find((u) => u.id === before.holder)?.name ?? null, holder?.id === CUSTOMER.id ? checkBack : null);
     // A bare "pass it to Dudu" is fully told by the handover line; don't also log the sentence as a note.
-    const onlyHandover = holder && !status && !c.note && Object.keys(patch).length === 0;
+    const onlyHandover = holder !== undefined && !status && !c.note && Object.keys(patch).length === 0;
     const after = onlyHandover ? getLead(c.leadId)! : updateLead(c.leadId, who, patch, status, c.note ?? text);
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "deal", describeDeal(after));
     if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "calendar", describeCalendar(after));
@@ -244,7 +245,7 @@ export async function runCommand(said: string, user: { id: string; name: string 
       title: after.title,
       from: STATUS_LABELS[before.status],
       to: status && status !== before.status ? STATUS_LABELS[status] : null,
-      note: c.note ?? (holder ? `עבר ל${holder.name}` : null),
+      note: c.note ?? (holder ? `עבר ל${holder.name}` : holder === null ? "הכדור לא אצל אף אחד" : null),
     });
   }
   for (const c of answer.create ?? []) {

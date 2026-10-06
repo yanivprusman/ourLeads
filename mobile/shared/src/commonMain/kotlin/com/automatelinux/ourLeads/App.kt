@@ -898,22 +898,22 @@ private fun daysFromToday(days: Int): String =
  * The customer is the third place: we wait for him until a day, then it is both partners' move.
  */
 @Composable
-private fun HolderPicker(d: BoardData, l: Lead, busy: Boolean, onCheckBack: (String) -> Unit, onPass: (String) -> Unit) {
+private fun HolderPicker(d: BoardData, l: Lead, busy: Boolean, onCheckBack: (String) -> Unit, onPass: (String?) -> Unit) {
     Surface(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, Line)) {
         Column(Modifier.padding(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 T("הכדור אצל", 14, FontWeight.SemiBold, Ink2, Modifier.padding(horizontal = 6.dp))
                 Spacer(Modifier.width(6.dp))
                 Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Paper).padding(4.dp)) {
-                    (d.people + d.customer).forEach { p ->
-                        val sel = p.id == l.holder
-                        val on = if (p.id == d.customer.id) Amber else Harbour
+                    (d.people.map { it.id to it.name } + (d.customer.id to d.customer.name) + (null to "אף אחד")).forEach { (id, name) ->
+                        val sel = id == l.holder
+                        val on = when (id) { null -> Color.White; d.customer.id -> Amber; else -> Harbour }
                         Box(
                             Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (sel) on else Color.Transparent)
-                                .clickable(enabled = !busy && !sel) { onPass(p.id) }.padding(vertical = 10.dp),
+                                .clickable(enabled = !busy && !sel) { onPass(id) }.padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            T(if (p.id == d.me.id) "${p.name} (אני)" else p.name, 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) Color.White else Muted)
+                            T(if (id == d.me.id) "$name (אני)" else name, 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) (if (id == null) Ink else Color.White) else Muted)
                         }
                     }
                 }
