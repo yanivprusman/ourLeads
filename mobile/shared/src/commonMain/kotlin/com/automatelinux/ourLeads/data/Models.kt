@@ -39,6 +39,8 @@ data class Lead(
     val details: String? = null,
     val status: String,
     val statusLabel: String,
+    /** The user id whose move it is ("the ball is in his hands"); null = nobody yet. */
+    val holder: String? = null,
     val nextStep: String? = null,
     val visitAt: String? = null,
     /** "2026-10-09T10:00" Israel time — a meeting before there is a contract (green). */
@@ -79,6 +81,8 @@ data class BoardData(
     val me: Me,
     val statuses: List<StatusDef>,
     val sources: List<SourceDef>,
+    /** Who the ball can be passed to. */
+    val people: List<Me> = emptyList(),
     val leads: List<Lead>,
     val unassigned: List<Msg> = emptyList(),
     val pending: Int = 0,

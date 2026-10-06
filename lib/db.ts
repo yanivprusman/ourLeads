@@ -134,6 +134,8 @@ export function getDb(): DatabaseSync {
     ["meeting_at", "TEXT"],
     ["work_start", "TEXT"],
     ["work_end", "TEXT"],
+    // Whose hands the ball is in — a user id from OURLEADS_USERS, or null for nobody yet.
+    ["holder", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
   // The old pipeline → the three states. Idempotent: rows already converted match no WHEN.
@@ -177,6 +179,8 @@ export interface LeadRow {
   /** The job itself, once there is a contract ("2026-10-12"). */
   work_start: string | null;
   work_end: string | null;
+  /** The user id (OURLEADS_USERS) whose move it is; null = nobody has taken it yet. */
+  holder: string | null;
   created_at: string;
   updated_at: string;
   last_message_at: string | null;
@@ -291,6 +295,18 @@ export function logFieldEdits(before: LeadRow, after: LeadRow, who: string): voi
     if (before[key] === after[key]) continue;
     addEvent(after.id, who, "note", `${label}: ${before[key] ?? "—"} ← ${after[key] ?? "—"}`);
   }
+}
+
+/**
+ * Pass the ball: the lead is now in `holder`'s hands until they pass it back.
+ * Logged as "הכדור: יניב ← דודו" so the history says who handed it over and when.
+ */
+export function setHolder(id: number, who: string, holder: { id: string; name: string } | null, fromName: string | null): void {
+  const lead = getLead(id);
+  if (!lead) throw new Error(`no lead #${id}`);
+  if ((lead.holder ?? null) === (holder?.id ?? null)) return;
+  getDb().prepare("UPDATE leads SET holder = ?, updated_at = ? WHERE id = ?").run(holder?.id ?? null, now(), id);
+  addEvent(id, who, "holder", `הכדור: ${fromName ?? "אף אחד"} ← ${holder?.name ?? "אף אחד"}`);
 }
 
 export function updateLead(

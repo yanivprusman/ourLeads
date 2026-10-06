@@ -62,6 +62,13 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
+    /** Pass the ball: the lead is now in [holder]'s hands (a user id). */
+    suspend fun setHolder(leadId: Int, holder: String): Result<Unit> {
+        val body = JsonObject(mapOf("holder" to JsonPrimitive(holder))).toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/leads/$leadId", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     /** Replace the deal on a lead. Empty fields clear. */
     suspend fun setDeal(leadId: Int, d: Deal): Result<Unit> {
         fun n(v: Double?) = v?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull

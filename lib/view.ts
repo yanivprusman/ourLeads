@@ -1,5 +1,5 @@
 import "server-only";
-import { SOURCES } from "./config";
+import { SOURCES, users } from "./config";
 import { STATUSES, STATUS_LABELS, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
 import { mediaSig } from "./auth";
 
@@ -32,6 +32,7 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
     details: l.details,
     status: l.status,
     statusLabel: STATUS_LABELS[l.status],
+    holder: l.holder,
     nextStep: l.next_step,
     visitAt: l.visit_at,
     meetingAt: l.meeting_at,
@@ -81,6 +82,8 @@ export function board(me: { id: string; name: string }) {
     me,
     statuses: STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s] })),
     sources: SOURCES.map((s) => ({ id: s.id, label: s.label, partner: s.partner })),
+    /** Who the ball can be passed to. */
+    people: users().map((u) => ({ id: u.id, name: u.name })),
     leads: leads.map((l) => leadView(l, byLead.get(l.id) ?? [], evByLead.get(l.id) ?? [])),
     unassigned: unassigned.slice(-40).reverse().map((m) => ({ ...messageView(m), source: m.source })),
     pending,

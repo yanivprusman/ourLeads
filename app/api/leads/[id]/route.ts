@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { asUser } from "@/lib/http";
-import { addEvent, getLead, isStatus, logFieldEdits, updateLead, type LeadPatch } from "@/lib/db";
+import { addEvent, getLead, isStatus, logFieldEdits, setHolder, updateLead, type LeadPatch } from "@/lib/db";
+import { users } from "@/lib/config";
 import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal } from "@/lib/deal";
 
 export const runtime = "nodejs";
@@ -13,6 +14,10 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     const body = (await request.json()) as Record<string, unknown>;
     if (body.status !== undefined && !isStatus(body.status))
       return NextResponse.json({ error: "unknown status" }, { status: 400 });
+    const people = users();
+    const holder = "holder" in body ? (body.holder === null ? null : people.find((u) => u.id === body.holder)) : undefined;
+    if (holder === undefined && "holder" in body)
+      return NextResponse.json({ error: "unknown holder" }, { status: 400 });
     const patch: LeadPatch = {};
     const str = (k: string) => (body[k] === null ? null : String(body[k]).trim() || null);
     if (typeof body.title === "string" && body.title.trim()) patch.title = body.title.trim();
@@ -46,6 +51,8 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(id, user.name, "deal", describeDeal(lead));
     if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(id, user.name, "calendar", describeCalendar(lead));
     logFieldEdits(before, lead, user.name);
+    if (holder !== undefined)
+      setHolder(id, user.name, holder, people.find((u) => u.id === before.holder)?.name ?? null);
     return NextResponse.json({ ok: true, id: lead.id });
   });
 }

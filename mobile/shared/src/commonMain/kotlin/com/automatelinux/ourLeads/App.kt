@@ -215,6 +215,7 @@ private fun BoardScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var view by remember { mutableStateOf("open") }
     var source by remember { mutableStateOf("all") }
+    var ball by remember { mutableStateOf("all") } // "all" or a user id: whose hands the lead is in
     var mode by remember { mutableStateOf("leads") }
     var openId by remember { mutableStateOf<Int?>(null) }
     var reply by remember { mutableStateOf<CommandReply?>(null) }
@@ -244,7 +245,7 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, mode, onView = { view = it }, onSource = { source = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
+            LeadList(d, error, view, source, ball, mode, onView = { view = it }, onSource = { source = it }, onBall = { ball = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
             AnimatedVisibility(
                 reply != null, Modifier.align(Alignment.BottomCenter),
                 enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut(),
@@ -273,10 +274,10 @@ private fun BoardScreen() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LeadList(
-    d: BoardData, error: String?, view: String, source: String, mode: String,
-    onView: (String) -> Unit, onSource: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
+    d: BoardData, error: String?, view: String, source: String, ball: String, mode: String,
+    onView: (String) -> Unit, onSource: (String) -> Unit, onBall: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
-    val inSource = d.leads.filter { source == "all" || it.source == source }
+    val inSource = d.leads.filter { (source == "all" || it.source == source) && (ball == "all" || it.holder == ball) }
     val leads = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
@@ -321,6 +322,19 @@ private fun LeadList(
                         s.label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f),
                         Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
                             .clickable { onSource(s.id) }.padding(horizontal = 14.dp, vertical = 7.dp),
+                    )
+                }
+            }
+            // Whose hands the ball is in
+            if (d.people.isNotEmpty()) Row(
+                Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
+            ) {
+                (listOf("all" to "הכל") + d.people.map { it.id to holderLabel(d, it.id) }).forEach { (id, label) ->
+                    val sel = id == ball
+                    T(
+                        label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f),
+                        Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
+                            .clickable { onBall(id) }.padding(horizontal = 14.dp, vertical = 7.dp),
                     )
                 }
             }
@@ -407,6 +421,10 @@ private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onE
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PartnerBadge(l.source, d.sources.firstOrNull { it.id == l.source }?.label)
+                        l.holder?.let {
+                            Spacer(Modifier.width(8.dp))
+                            Pill(holderLabel(d, it), if (it == d.me.id) Harbour else Color(0xFFE6EEF5), if (it == d.me.id) Color.White else Harbour)
+                        }
                         Spacer(Modifier.weight(1f))
                         when (l.status) {
                             "work" -> Pill("עבודה" + (l.workStart?.let { s0 -> " ${sayDay(s0)}" + (l.workEnd?.takeIf { it != s0 }?.let { " – ${sayDay(it)}" } ?: "") } ?: ""), t.bg, t.fg)
@@ -602,6 +620,18 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                     }
                 }
             }
+            if (d.people.isNotEmpty()) item {
+                HolderPicker(d, l, busy) { id ->
+                    busy = true
+                    scope.launch {
+                        when (val r = api.setHolder(l.id, id)) {
+                            is Result.Ok -> { error = null; onChanged() }
+                            is Result.Err -> error = r.message
+                        }
+                        busy = false
+                    }
+                }
+            }
             item {
                 ScheduleSection(l, busy) { fields ->
                     busy = true
@@ -715,6 +745,36 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                     Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 20.dp)
                         .clip(CircleShape).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 5.dp),
                 )
+            }
+        }
+    }
+}
+
+/** "אצלי" for the person holding the phone, "אצל דודו" for anyone else. */
+private fun holderLabel(d: BoardData, id: String): String =
+    if (id == d.me.id) "אצלי" else "אצל ${d.people.firstOrNull { it.id == id }?.name ?: id}"
+
+/**
+ * Whose move it is. Passing the ball says "I've done my part — it's yours until you
+ * pass it back". It is separate from the status: a lead at פגישה can be in either hands.
+ */
+@Composable
+private fun HolderPicker(d: BoardData, l: Lead, busy: Boolean, onPass: (String) -> Unit) {
+    Surface(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, Line)) {
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            T("הכדור אצל", 14, FontWeight.SemiBold, Ink2, Modifier.padding(horizontal = 6.dp))
+            Spacer(Modifier.width(6.dp))
+            Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Paper).padding(4.dp)) {
+                d.people.forEach { p ->
+                    val sel = p.id == l.holder
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (sel) Harbour else Color.Transparent)
+                            .clickable(enabled = !busy && !sel) { onPass(p.id) }.padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        T(if (p.id == d.me.id) "${p.name} (אני)" else p.name, 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) Color.White else Muted)
+                    }
+                }
             }
         }
     }
