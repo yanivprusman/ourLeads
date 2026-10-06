@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -477,7 +480,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var photo by remember { mutableStateOf<String?>(null) }
+    var photo by remember { mutableStateOf<Int?>(null) } // index into photos, open in the viewer
     var said by remember(l.id) { mutableStateOf<CommandReply?>(null) }
     var talkError by remember(l.id) { mutableStateOf<String?>(null) }
     val src = d.sources.firstOrNull { it.id == l.source }
@@ -510,9 +513,9 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                 Box(Modifier.fillMaxWidth().background(Band)) {
                     if (photos.isNotEmpty()) {
                         LazyRow(Modifier.height(260.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            items(photos) { p ->
+                            itemsIndexed(photos) { i, p ->
                                 val w = if (photos.size == 1) Modifier.fillParentMaxWidth() else Modifier.width(220.dp)
-                                RemoteImage(p, Modifier.fillParentMaxHeight().then(w).clickable { photo = p })
+                                RemoteImage(p, Modifier.fillParentMaxHeight().then(w).clickable { photo = i })
                             }
                         }
                     }
@@ -698,11 +701,20 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
             }
         }
         StatusScrim()
-        if (photo != null) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .94f)).clickable { photo = null }, contentAlignment = Alignment.Center) {
-                // fillMaxSize, not fillMaxWidth: with an unbounded height, Fit sizes
-                // the box to the bitmap's own height and the photo never grows.
-                RemoteImage(photo!!, Modifier.fillMaxSize(), crop = false, full = true)
+        photo?.let { start ->
+            // Swipe through all the lead's photos; a tap anywhere closes.
+            val pager = rememberPagerState(initialPage = start) { photos.size }
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .94f)).clickable { photo = null }) {
+                HorizontalPager(pager, Modifier.fillMaxSize(), pageSpacing = 12.dp) { i ->
+                    // fillMaxSize, not fillMaxWidth: with an unbounded height, Fit sizes
+                    // the box to the bitmap's own height and the photo never grows.
+                    RemoteImage(photos[i], Modifier.fillMaxSize(), crop = false, full = true)
+                }
+                if (photos.size > 1) T(
+                    "${pager.currentPage + 1}/${photos.size}", 14, FontWeight.SemiBold, Color.White,
+                    Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 20.dp)
+                        .clip(CircleShape).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 5.dp),
+                )
             }
         }
     }
