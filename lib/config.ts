@@ -19,6 +19,20 @@ export function dataDir(): string {
   return required("OURLEADS_DATA_DIR");
 }
 
+/**
+ * Whether THIS server reads the WhatsApp chats. Dev and prod share one board
+ * (one OURLEADS_DATA_DIR), so exactly one of them may turn messages into leads —
+ * two readers would process every message twice. A switch flipped by hand, not a
+ * failover: "dev looks broken, let prod take over" is a guess, and a wrong guess
+ * leaves both reading. Normally prod (finished code); dev while working on
+ * extraction. `OURLEADS_INGEST=on|off`, no default.
+ */
+export function ingestEnabled(): boolean {
+  const v = required("OURLEADS_INGEST");
+  if (v !== "on" && v !== "off") throw new Error(`OURLEADS_INGEST must be "on" or "off", got "${v}"`);
+  return v === "on";
+}
+
 export interface User {
   id: string;
   name: string;

@@ -33,8 +33,19 @@ token, baked in from `mobile/.env`. A browser signs in with the access code, or 
 served by signed URL (`/api/media/<file>?sig=`).
 
 The dev host sits behind the dev-auth wall, and Dudu must NOT be granted access to it: a grant
-there is root on the dev box. Dudu's browser access has to go through prod, with its own
-`.env.local` and data dir.
+there is root on the dev box. Dudu's browser access has to go through prod.
+
+## Dev and prod: one board, two versions (2026-10-06)
+Yaniv works on dev, Dudu on prod, at the same time on the same leads. So:
+- **One data dir.** Both `.env.local` files set `OURLEADS_DATA_DIR=/opt/automateLinux/data/ourLeads/shared`
+  (SQLite in WAL mode, both servers on the desktop). Dev code writes the board Dudu sees.
+- **One reader.** `OURLEADS_INGEST=on` on exactly one server (prod normally), `off` on the other.
+  Flip it by hand to test extraction on dev — never two "on". The reader also writes the daily
+  backup to `shared/backups/` (14 kept).
+- **Prod follows every commit.** `core.hooksPath=.githooks`; `post-commit` starts
+  `scripts/auto-deploy-prod.sh` as its own systemd unit (`journalctl -u 'ourleads-autodeploy-*'`).
+  So prod is minutes behind dev, and a schema change reaches prod with the commit that makes it —
+  but a half-written migration in *uncommitted* dev code still runs against the shared DB.
 
 ## Testing
 Never test commands that name real leads against the live board: they change real leads.

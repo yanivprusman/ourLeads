@@ -1,0 +1,12 @@
+#!/bin/bash
+# Refresh the daemon's version cache, then deploy this commit to prod in the
+# background (scripts/auto-deploy-prod.sh says why prod follows every commit).
+# Only from the dev checkout: prod is a worktree of this repo and shares hooks.
+dir="$(dirname "$0")"
+"$dir/refresh-version.sh"
+top="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ "$top" = "/opt/dev/ourLeads" ] || exit 0
+systemd-run --quiet --collect --unit "ourleads-autodeploy-$(date +%s%N)" \
+    /opt/dev/ourLeads/scripts/auto-deploy-prod.sh >/dev/null 2>&1 \
+    || echo "post-commit: could not start the prod auto-deploy (systemd-run failed)" >&2
+exit 0
