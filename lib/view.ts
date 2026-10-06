@@ -64,7 +64,14 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
 export function board(me: { id: string; name: string }) {
   const d = getDb();
   const leads = d
-    .prepare("SELECT * FROM leads ORDER BY COALESCE(last_message_at, created_at) DESC")
+    // Fixed order, oldest first: by when the lead came in — its first message, or
+    // created_at for a lead born from a voice command (it has no messages). Later
+    // messages never move it, so the list reads the same every time it is opened;
+    // id breaks the ties the first import left (many leads share one second).
+    .prepare(
+      `SELECT * FROM leads ORDER BY
+         COALESCE((SELECT MIN(sent_at) FROM messages WHERE lead_id = leads.id), created_at) ASC, id ASC`,
+    )
     .all() as unknown as LeadRow[];
   const msgs = d.prepare("SELECT * FROM messages ORDER BY sent_at ASC").all() as unknown as MessageRow[];
   const events = d.prepare("SELECT * FROM events ORDER BY at ASC, id ASC").all() as unknown as EventRow[];

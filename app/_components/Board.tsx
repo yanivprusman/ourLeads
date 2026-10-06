@@ -72,7 +72,7 @@ export default function Board() {
     );
 
   const leads = inSource.filter((l) => (view === "open" ? !CLOSED.includes(l.status) : l.status === view));
-  // One list in the server's order (latest message first). Status never reorders it:
+  // One list in the server's order (fixed: the order leads came in, newest at the bottom). Status never reorders it:
   // marking a lead פגישה or עבודה must not make it jump away from where the user tapped it.
   const open = data.leads.find((l) => l.id === openId) ?? null;
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
