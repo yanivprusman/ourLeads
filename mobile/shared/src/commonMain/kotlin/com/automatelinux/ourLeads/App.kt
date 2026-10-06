@@ -450,11 +450,12 @@ private fun QuickAction(icon: ImageVector, label: String, color: Color, modifier
 private val imageCache = mutableMapOf<String, ImageBitmap>()
 
 @Composable
-private fun RemoteImage(path: String, modifier: Modifier, crop: Boolean = true) {
+private fun RemoteImage(path: String, modifier: Modifier, crop: Boolean = true, full: Boolean = false) {
     val api = LocalApi.current
-    var bmp by remember(path) { mutableStateOf(imageCache[path]) }
-    LaunchedEffect(path) {
-        if (bmp == null) api.media(path)?.let(::decodeImage)?.let { imageCache[path] = it; bmp = it }
+    val key = if (full) "$path#full" else path
+    var bmp by remember(key) { mutableStateOf(imageCache[key]) }
+    LaunchedEffect(key) {
+        if (bmp == null) api.media(path)?.let { decodeImage(it, full) }?.let { imageCache[key] = it; bmp = it }
     }
     val b = bmp
     if (b != null) Image(b, null, modifier, contentScale = if (crop) ContentScale.Crop else ContentScale.Fit)
@@ -695,7 +696,9 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
         StatusScrim()
         if (photo != null) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .94f)).clickable { photo = null }, contentAlignment = Alignment.Center) {
-                RemoteImage(photo!!, Modifier.fillMaxWidth(), crop = false)
+                // fillMaxSize, not fillMaxWidth: with an unbounded height, Fit sizes
+                // the box to the bitmap's own height and the photo never grows.
+                RemoteImage(photo!!, Modifier.fillMaxSize(), crop = false, full = true)
             }
         }
     }

@@ -19,10 +19,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import java.io.File
 
-actual fun decodeImage(bytes: ByteArray): ImageBitmap? {
+actual fun decodeImage(bytes: ByteArray, full: Boolean): ImageBitmap? {
     // Thumbnails and the detail view never need the camera's full resolution;
     // decoding at a quarter keeps a lead with ten photos from eating the heap.
-    val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+    // The full-screen viewer is the exception: it shows one photo at screen
+    // size, where a halved bitmap blurs the text in a WhatsApp screenshot.
+    val opts = BitmapFactory.Options().apply { inSampleSize = if (full) 1 else 2 }
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)?.asImageBitmap()
 }
 

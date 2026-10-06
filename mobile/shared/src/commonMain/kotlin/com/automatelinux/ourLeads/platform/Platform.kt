@@ -18,7 +18,7 @@ class Recording(val bytes: ByteArray, val fileName: String, val mime: String, va
 @Composable
 expect fun rememberVoiceRecorder(): VoiceRecorder
 
-expect fun decodeImage(bytes: ByteArray): ImageBitmap?
+expect fun decodeImage(bytes: ByteArray, full: Boolean = false): ImageBitmap?
 
 /** The system back gesture closes an open lead instead of leaving the app. */
 @Composable
