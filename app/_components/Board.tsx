@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import LeadDetail from "./LeadDetail";
 import VoiceDock, { type CommandReply } from "./VoiceDock";
 import Mark from "./Mark";
@@ -11,7 +11,6 @@ import {
   STATUS_TONE,
   holderLabel,
   onPlate,
-  tossTo,
   shortDay,
   intlPhone,
   margin,
@@ -186,7 +185,7 @@ export default function Board() {
         ) : (
           <>
         {leads.map((l) => (
-          <LeadCard key={l.id} lead={l} data={data} onOpen={() => setOpenId(l.id)} onFilter={setBall} onChanged={(e) => (e ? setError(e) : void load())} />
+          <LeadCard key={l.id} lead={l} data={data} onOpen={() => setOpenId(l.id)} />
         ))}
         {leads.length === 0 && (
           <div className="text-center py-16 text-muted">
@@ -263,76 +262,7 @@ function PartnerBadge({ source, data }: { source: string; data: BoardData }) {
   );
 }
 
-/**
- * The "אצל …" pill on a card: a tap tosses the ball (mine ↔ my partner's; from the customer it comes back
- * to me), a long press shows only that holder's leads. It lives inside the card's button, so it is a span
- * that swallows its own events rather than a nested <button>.
- */
-function HolderPill({ lead: l, data, holder, className, title, children, onFilter, onChanged }: {
-  lead: Lead; data: BoardData; holder: string; className: string; title?: string; children: React.ReactNode;
-  onFilter: (id: string) => void; onChanged: (error?: string) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressed = useRef(false);
-  const to = tossTo(data, l.holder);
-  const clear = () => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-  };
-  async function toss() {
-    if (busy || !to) return;
-    setBusy(true);
-    const res = await fetch(`/api/leads/${l.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ holder: to }),
-    });
-    setBusy(false);
-    onChanged(res.ok ? undefined : ((await res.json()).error ?? `HTTP ${res.status}`));
-  }
-  return (
-    <span
-      role="button"
-      tabIndex={0}
-      data-id="lead-holder-pill"
-      title={title ?? (to ? `לחיצה: ${holderLabel(data, to)} · לחיצה ארוכה: רק ${holderLabel(data, holder)}` : undefined)}
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        longPressed.current = false;
-        clear();
-        timer.current = setTimeout(() => {
-          longPressed.current = true;
-          navigator.vibrate?.(20);
-          onFilter(holder);
-        }, 500);
-      }}
-      onPointerUp={clear}
-      onPointerLeave={clear}
-      onPointerCancel={clear}
-      onContextMenu={(e) => e.preventDefault()}
-      onClick={(e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        if (!longPressed.current) void toss();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.stopPropagation();
-          e.preventDefault();
-          void toss();
-        }
-      }}
-      className={`${className} cursor-pointer select-none [-webkit-touch-callout:none] transition hover:brightness-95 active:scale-95 ${busy ? "opacity-50" : ""}`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function LeadCard({ lead: l, data, onOpen, onFilter, onChanged }: {
-  lead: Lead; data: BoardData; onOpen: () => void; onFilter: (id: string) => void; onChanged: (error?: string) => void;
-}) {
+function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOpen: () => void }) {
   const tone = STATUS_TONE[l.status];
   const thumb = l.messages.find((m) => m.mediaType === "image" && m.mediaUrl)?.mediaUrl;
   const phone = l.phones[0];
@@ -347,26 +277,21 @@ function LeadCard({ lead: l, data, onOpen, onFilter, onChanged }: {
           <div className="flex items-center gap-2">
             <PartnerBadge source={l.source} data={data} />
             {l.checkBackDue ? (
-              <HolderPill lead={l} data={data} holder={data.customer.id} onFilter={onFilter} onChanged={onChanged} className="rounded-full px-2 py-0.5 text-[11.5px] font-bold bg-amber text-white" title="הלקוח קיבל את הזמן שלו — שנינו בודקים איתו. לחיצה: אני לוקח את הכדור">
+              <span className="rounded-full px-2 py-0.5 text-[11.5px] font-bold bg-amber text-white" title="הלקוח קיבל את הזמן שלו — שנינו בודקים איתו">
                 לבדוק עם הלקוח
-              </HolderPill>
+              </span>
             ) : l.holder === data.customer.id ? (
-              <HolderPill lead={l} data={data} holder={l.holder} onFilter={onFilter} onChanged={onChanged} className="rounded-full px-2 py-0.5 text-[11.5px] font-semibold bg-amber-soft text-[#8a4a0b]">
+              <span className="rounded-full px-2 py-0.5 text-[11.5px] font-semibold bg-amber-soft text-[#8a4a0b]">
                 {holderLabel(data, l.holder)}{l.checkBackAt ? ` · עד ${shortDay(l.checkBackAt)}` : ""}
-              </HolderPill>
+              </span>
             ) : l.holder && (
-              <HolderPill
-                lead={l}
-                data={data}
-                holder={l.holder}
-                onFilter={onFilter}
-                onChanged={onChanged}
+              <span
                 className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${
                   l.holder === data.me.id ? "bg-harbour text-white" : "bg-[#e6eef5] text-harbour"
                 }`}
               >
                 {holderLabel(data, l.holder)}
-              </HolderPill>
+              </span>
             )}
             {l.status !== "none" ? (
               <span className={`ms-auto rounded-full px-2 py-0.5 text-[11.5px] font-bold ${tone.pill}`}>

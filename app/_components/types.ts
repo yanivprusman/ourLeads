@@ -102,15 +102,6 @@ export function holderLabel(data: BoardData, id: string): string {
 }
 
 /**
- * Where a tap on the card's "אצל …" pill sends the ball: mine goes to my partner, my partner's comes to me,
- * and a lead waiting on the customer comes back to me — whoever talks to him takes the ball.
- */
-export function tossTo(data: BoardData, holder: string | null): string | null {
-  if (holder !== data.me.id) return data.me.id;
-  return data.people.find((p) => p.id !== data.me.id)?.id ?? null;
-}
-
-/**
  * Is it `person`'s move? Their own leads, plus every lead whose customer has had his time —
  * then it is on both partners' lists until one of them takes the ball back.
  */

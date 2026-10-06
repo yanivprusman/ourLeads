@@ -13,7 +13,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,8 +43,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -254,7 +251,7 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, ball, mode, onView = { view = it }, onSource = { source = it }, onBall = { ball = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null }, onChanged = { tick++ })
+            LeadList(d, error, view, source, ball, mode, onView = { view = it }, onSource = { source = it }, onBall = { ball = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
             AnimatedVisibility(
                 reply != null, Modifier.align(Alignment.BottomCenter),
                 enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut(),
@@ -289,7 +286,6 @@ private fun BoardScreen() {
 private fun LeadList(
     d: BoardData, error: String?, view: String, source: String, ball: String, mode: String,
     onView: (String) -> Unit, onSource: (String) -> Unit, onBall: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
-    onChanged: () -> Unit,
 ) {
     val inSource = d.leads.filter { (source == "all" || it.source == source) && (ball == "all" || when (ball) { NOBODY -> it.holder == null; d.customer.id -> it.holder == ball; else -> it.holder == ball || it.checkBackDue }) }
     val leads = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
@@ -376,7 +372,7 @@ private fun LeadList(
         item { Spacer(Modifier.height(8.dp)) }
         // One list in the server's order (latest message first). Status never reorders it:
         // marking a lead פגישה or עבודה must not make it jump away from where the user tapped it.
-        items(leads, key = { it.id }) { LeadCard(d, it, onReply, onError, onBall, onChanged) { onOpen(it.id) } }
+        items(leads, key = { it.id }) { LeadCard(d, it, onReply, onError) { onOpen(it.id) } }
         if (leads.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 LocalMark.current(Modifier.size(52.dp).alpha(.3f))
@@ -413,53 +409,12 @@ private fun PartnerBadge(src: String, label: String?) {
     }
 }
 
-/**
- * The "אצל …" pill on a card: a tap tosses the ball (mine ↔ my partner's; from the customer it comes back
- * to me), a long press shows only [filterBy]'s leads.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun HolderPill(
-    d: BoardData, l: Lead, filterBy: String, text: String, bg: Color, fg: Color,
-    onFilter: (String) -> Unit, onChanged: () -> Unit, onError: (String) -> Unit,
-) {
-    val api = LocalApi.current
-    val scope = rememberCoroutineScope()
-    val haptic = LocalHapticFeedback.current
-    var busy by remember(l.id) { mutableStateOf(false) }
-    val to = tossTo(d, l.holder)
-    T(
-        text, 12, FontWeight.SemiBold, fg,
-        Modifier.clip(CircleShape).background(bg)
-            .combinedClickable(
-                onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onFilter(filterBy) },
-                onClick = {
-                    if (busy || to == null) return@combinedClickable
-                    busy = true
-                    scope.launch {
-                        when (val r = api.setHolder(l.id, to)) {
-                            is Result.Ok -> onChanged()
-                            is Result.Err -> onError(r.message)
-                        }
-                        busy = false
-                    }
-                },
-            )
-            .alpha(if (busy) .5f else 1f)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    )
-}
-
-/** Where a tap on the card's pill sends the ball: mine → my partner, anyone else's (partner's, the customer's) → me. */
-private fun tossTo(d: BoardData, holder: String?): String? =
-    if (holder != d.me.id) d.me.id else d.people.firstOrNull { it.id != d.me.id }?.id
-
 @Composable
 private fun Pill(text: String, bg: Color, fg: Color, strike: Boolean = false) =
     T(text, 12, FontWeight.SemiBold, fg, Modifier.clip(CircleShape).background(bg).padding(horizontal = 8.dp, vertical = 2.dp), strike = strike)
 
 @Composable
-private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onFilter: (String) -> Unit, onChanged: () -> Unit, onClick: () -> Unit) {
+private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onClick: () -> Unit) {
     val uri = LocalUriHandler.current
     val t = tone(l.status)
     val thumb = l.messages.firstOrNull { it.mediaType == "image" && it.mediaUrl != null }?.mediaUrl
@@ -479,9 +434,9 @@ private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onE
                         l.holder?.let {
                             Spacer(Modifier.width(8.dp))
                             when {
-                                l.checkBackDue -> HolderPill(d, l, d.customer.id, "לבדוק עם הלקוח", Amber, Color.White, onFilter, onChanged, onError)
-                                it == d.customer.id -> HolderPill(d, l, it, holderLabel(d, it) + (l.checkBackAt?.let { c -> " · עד ${sayDay(c)}" } ?: ""), AmberSoft, Color(0xFF8A4A0B), onFilter, onChanged, onError)
-                                else -> HolderPill(d, l, it, holderLabel(d, it), if (it == d.me.id) Harbour else Color(0xFFE6EEF5), if (it == d.me.id) Color.White else Harbour, onFilter, onChanged, onError)
+                                l.checkBackDue -> Pill("לבדוק עם הלקוח", Amber, Color.White)
+                                it == d.customer.id -> Pill(holderLabel(d, it) + (l.checkBackAt?.let { c -> " · עד ${sayDay(c)}" } ?: ""), AmberSoft, Color(0xFF8A4A0B))
+                                else -> Pill(holderLabel(d, it), if (it == d.me.id) Harbour else Color(0xFFE6EEF5), if (it == d.me.id) Color.White else Harbour)
                             }
                         }
                         Spacer(Modifier.weight(1f))
