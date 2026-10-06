@@ -491,7 +491,11 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
         busy = true
         scope.launch {
             when (val r = api.setStatus(l.id, status, note)) {
-                is Result.Ok -> { note = ""; error = null; onChanged() }
+                is Result.Ok -> {
+                    note = ""; error = null; onChanged()
+                    // A removed lead is done with — return to the list rather than stay on it.
+                    if (status == "removed") onBack()
+                }
                 is Result.Err -> error = r.message
             }
             busy = false
