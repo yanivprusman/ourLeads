@@ -106,8 +106,11 @@ private class AndroidContactSync(
     private fun save(lead: Lead, sources: List<SourceDef>, group: Long) {
         val phones = lead.phones.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (phones.isEmpty()) return
-        val displayName = lead.customerName?.takeIf { it.isNotBlank() } ?: lead.title
-        val company = "ourLeads · " + (sources.firstOrNull { it.id == lead.source }?.label ?: lead.source)
+        val site = sources.firstOrNull { it.id == lead.source }?.label ?: lead.source
+        // The name is what a ringing phone and the call log show, so it carries the whole lead:
+        // "אילן · הצעת מחיר לעבודה בגובה – גבעתיים · בסיס", not a bare first name.
+        val displayName = listOfNotNull(lead.customerName?.takeIf { it.isNotBlank() }, lead.title, site).joinToString(" · ")
+        val company = "ourLeads · $site"
         val job = lead.trade?.takeIf { it.isNotBlank() } ?: lead.title
         val note = listOfNotNull(lead.title, listOfNotNull(lead.address, lead.city).joinToString(", ").ifBlank { null }, "ליד #${lead.id}")
             .joinToString("\n")
@@ -131,7 +134,8 @@ private class AndroidContactSync(
             fun row(mime: String) = ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
                 .withValue(ContactsContract.Data.MIMETYPE, mime)
-            ops += row(CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE).withValue(CommonDataKinds.StructuredName.DISPLAY_NAME, displayName).build()
+            ops += row(CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE).withValue(CommonDataKinds.StructuredName.DISPLAY_NAME, displayName)
+                .withValue(CommonDataKinds.StructuredName.GIVEN_NAME, displayName).build()
             ops += row(CommonDataKinds.Organization.CONTENT_ITEM_TYPE)
                 .withValue(CommonDataKinds.Organization.COMPANY, company).withValue(CommonDataKinds.Organization.TITLE, job).build()
             ops += row(CommonDataKinds.Note.CONTENT_ITEM_TYPE).withValue(CommonDataKinds.Note.NOTE, note).build()
@@ -149,7 +153,7 @@ private class AndroidContactSync(
                     .withValue(ContactsContract.Data.RAW_CONTACT_ID, raw).withValue(ContactsContract.Data.MIMETYPE, mime)
                     .apply { values.forEach { (k, v) -> withValue(k, v) } }.build()
             }
-            put(CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE, mapOf(CommonDataKinds.StructuredName.DISPLAY_NAME to displayName))
+            put(CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE, mapOf(CommonDataKinds.StructuredName.DISPLAY_NAME to displayName, CommonDataKinds.StructuredName.GIVEN_NAME to displayName))
             put(CommonDataKinds.Organization.CONTENT_ITEM_TYPE, mapOf(CommonDataKinds.Organization.COMPANY to company, CommonDataKinds.Organization.TITLE to job))
             put(CommonDataKinds.Note.CONTENT_ITEM_TYPE, mapOf(CommonDataKinds.Note.NOTE to note))
             for (p in newPhones) ops += ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
