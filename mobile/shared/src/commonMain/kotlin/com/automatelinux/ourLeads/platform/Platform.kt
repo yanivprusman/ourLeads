@@ -26,11 +26,11 @@ expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
 
 /**
  * Saves every lead's phone number to the phone's contacts, so a customer who calls back
- * shows up by name. Contacts go into one account the user picks once (Google, so they sync
- * to every device on it) and into an "ourLeads" label there.
+ * shows up by name. Contacts stay on the phone (its local account, never a cloud one), under
+ * an "ourLeads" label.
  */
 interface ContactSync {
-    /** The user tapped [problem]: ask again for whatever is missing (permission, account). */
+    /** The user tapped [problem]: ask again for the contacts permission. */
     fun setUp()
     /** Writes leads that are new or changed since the last pass. Safe to call on every board load. */
     suspend fun sync(leads: List<com.automatelinux.ourLeads.data.Lead>, sources: List<com.automatelinux.ourLeads.data.SourceDef>)

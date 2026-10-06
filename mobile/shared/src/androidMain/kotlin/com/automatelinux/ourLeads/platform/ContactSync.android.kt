@@ -1,14 +1,13 @@
 package com.automatelinux.ourLeads.platform
 
 import android.Manifest
-import android.accounts.AccountManager
-import android.app.Activity
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.ContactsContract
 import android.provider.ContactsContract.CommonDataKinds
 import android.provider.Settings
@@ -40,7 +39,6 @@ private const val GROUP = "ourLeads"
 private class AndroidContactSync(
     private val context: Context,
     private val askPermission: () -> Unit,
-    private val chooseAccount: () -> Unit,
 ) : ContactSync {
     private val prefs = context.getSharedPreferences("ourleads_contacts", Context.MODE_PRIVATE)
     private val resolver: ContentResolver = context.contentResolver
@@ -50,12 +48,19 @@ private class AndroidContactSync(
 
     private val permitted get() = listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
         .all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
-    private val accountName get() = prefs.getString("account_name", null)
-    private val accountType get() = prefs.getString("account_type", null)
+
+    /**
+     * The phone's own account: contacts that never leave the device (Samsung calls it "Phone").
+     * It has to be named — on Android 16 a contact inserted with no account is moved into the
+     * default account, which on this phone is Google. Before Android 15 there is no API for it,
+     * and "no account" is the device-local account itself.
+     */
+    private val accountName: String? = if (Build.VERSION.SDK_INT >= 35) ContactsContract.RawContacts.getLocalAccountName(context) else null
+    private val accountType: String? = if (Build.VERSION.SDK_INT >= 35) ContactsContract.RawContacts.getLocalAccountType(context) else null
 
     /** Startup: walk through whatever is missing, unless the user already said no. */
     fun begin() {
-        if (prefs.getBoolean("declined", false)) { problem = OFF; return }
+        if (!permitted && prefs.getBoolean("declined", false)) { problem = NO_PERMISSION; return }
         next()
     }
 
@@ -75,7 +80,6 @@ private class AndroidContactSync(
     private fun next() {
         when {
             !permitted -> { askedThisRun = true; askPermission() }
-            accountName == null -> chooseAccount()
             else -> problem = null
         }
     }
@@ -84,21 +88,13 @@ private class AndroidContactSync(
         if (granted) next() else { prefs.edit().putBoolean("declined", true).apply(); problem = NO_PERMISSION }
     }
 
-    fun onAccount(name: String?, type: String?) {
-        if (name == null || type == null) { prefs.edit().putBoolean("declined", true).apply(); problem = OFF; return }
-        prefs.edit().putString("account_name", name).putString("account_type", type).apply()
-        problem = null
-    }
-
     override suspend fun sync(leads: List<Lead>, sources: List<SourceDef>) {
-        val name = accountName ?: return
-        val type = accountType ?: return
         if (!permitted) { problem = NO_PERMISSION; return }
         lock.withLock {
             withContext(Dispatchers.IO) {
                 try {
-                    val group = groupId(name, type)
-                    for (lead in leads) save(lead, sources, name, type, group)
+                    val group = groupId()
+                    for (lead in leads) save(lead, sources, group)
                     problem = null
                 } catch (e: Exception) {
                     problem = "שמירת אנשי קשר נכשלה: ${e.message ?: e.javaClass.simpleName}"
@@ -107,7 +103,7 @@ private class AndroidContactSync(
         }
     }
 
-    private fun save(lead: Lead, sources: List<SourceDef>, account: String, type: String, group: Long) {
+    private fun save(lead: Lead, sources: List<SourceDef>, group: Long) {
         val phones = lead.phones.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (phones.isEmpty()) return
         val displayName = lead.customerName?.takeIf { it.isNotBlank() } ?: lead.title
@@ -129,8 +125,8 @@ private class AndroidContactSync(
         if (raw == null) {
             if (newPhones.isEmpty()) { prefs.edit().putString(fpKey, fp).apply(); return }
             ops += ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
-                .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, account)
-                .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, type)
+                .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, accountName)
+                .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, accountType)
                 .build()
             fun row(mime: String) = ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
@@ -161,7 +157,8 @@ private class AndroidContactSync(
                 .withValue(ContactsContract.Data.MIMETYPE, CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
                 .withValue(CommonDataKinds.Phone.NUMBER, p).withValue(CommonDataKinds.Phone.TYPE, CommonDataKinds.Phone.TYPE_MOBILE).build()
         }
-        resolver.applyBatch(ContactsContract.AUTHORITY, ops)
+        val result = resolver.applyBatch(ContactsContract.AUTHORITY, ops)
+        if (raw == null) assertOnPhone(result[0].uri!!)
         prefs.edit().putString(fpKey, fp).apply()
     }
 
@@ -196,16 +193,34 @@ private class AndroidContactSync(
         )?.use { c -> generateSequence { if (c.moveToNext()) c.getString(0) else null }.any { it.filter(Char::isDigit).takeLast(9) == digits } } == true
     }
 
-    /** The "ourLeads" label in the chosen account — Google syncs it, so the leads are one filter away. */
-    private fun groupId(account: String, type: String): Long {
+    /**
+     * The provider may quietly put a contact somewhere other than where it was asked to (see
+     * [accountType]). Customer numbers must not end up in a cloud account, so a contact that
+     * landed anywhere but the phone is removed and the sync stops with the reason.
+     */
+    private fun assertOnPhone(rawUri: Uri) {
+        val landed = resolver.query(rawUri, arrayOf(ContactsContract.RawContacts.ACCOUNT_TYPE), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
+        if (landed == accountType) return
+        resolver.delete(rawUri.buildUpon().appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true").build(), null, null)
+        error("אנדרואיד שמר בחשבון $landed ולא בטלפון")
+    }
+
+    private fun accountWhere(name: String, type: String): Pair<String, Array<String>> =
+        if (accountName == null || accountType == null) "$name IS NULL AND $type IS NULL" to emptyArray()
+        else "$name=? AND $type=?" to arrayOf(accountName, accountType)
+
+    /** The "ourLeads" label on the phone account, so the leads are one filter away in Contacts. */
+    private fun groupId(): Long {
+        val (where, args) = accountWhere(ContactsContract.Groups.ACCOUNT_NAME, ContactsContract.Groups.ACCOUNT_TYPE)
         resolver.query(
             ContactsContract.Groups.CONTENT_URI, arrayOf(ContactsContract.Groups._ID),
-            "${ContactsContract.Groups.ACCOUNT_NAME}=? AND ${ContactsContract.Groups.ACCOUNT_TYPE}=? AND ${ContactsContract.Groups.TITLE}=? AND ${ContactsContract.Groups.DELETED}=0",
-            arrayOf(account, type, GROUP), null,
+            "$where AND ${ContactsContract.Groups.TITLE}=? AND ${ContactsContract.Groups.DELETED}=0",
+            args + GROUP, null,
         )?.use { if (it.moveToFirst()) return it.getLong(0) }
         val uri = resolver.insert(ContactsContract.Groups.CONTENT_URI, android.content.ContentValues().apply {
-            put(ContactsContract.Groups.ACCOUNT_NAME, account)
-            put(ContactsContract.Groups.ACCOUNT_TYPE, type)
+            put(ContactsContract.Groups.ACCOUNT_NAME, accountName)
+            put(ContactsContract.Groups.ACCOUNT_TYPE, accountType)
             put(ContactsContract.Groups.TITLE, GROUP)
             put(ContactsContract.Groups.GROUP_VISIBLE, 1)
         }) ?: error("could not create the $GROUP label")
@@ -213,7 +228,6 @@ private class AndroidContactSync(
     }
 
     companion object {
-        const val OFF = "לידים לא נשמרים באנשי הקשר · הקש להפעלה"
         const val NO_PERMISSION = "אין הרשאה לאנשי קשר · הקש להפעלה"
     }
 }
@@ -225,25 +239,10 @@ actual fun rememberContactSync(): ContactSync {
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         holder?.onPermission(r.values.all { it })
     }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        val ok = r.resultCode == Activity.RESULT_OK
-        holder?.onAccount(
-            r.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)?.takeIf { ok },
-            r.data?.getStringExtra(AccountManager.KEY_ACCOUNT_TYPE)?.takeIf { ok },
-        )
-    }
     val sync = remember(context) {
         AndroidContactSync(
             context,
             askPermission = { permission.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)) },
-            chooseAccount = {
-                picker.launch(
-                    AccountManager.newChooseAccountIntent(
-                        null, null, arrayOf("com.google"),
-                        "לאיזה חשבון לשמור את אנשי הקשר של הלידים?", null, null, null,
-                    ),
-                )
-            },
         ).also { holder = it }
     }
     LaunchedEffect(sync) { sync.begin() }
