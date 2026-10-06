@@ -16,6 +16,8 @@ export function messageView(m: MessageRow) {
     mediaUrl: m.media_file ? `/api/media/${encodeURIComponent(m.media_file)}?sig=${mediaSig(m.media_file)}` : null,
     transcript: m.transcript,
     error: m.error,
+    /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */
+    phoneShown: m.phone_shown,
   };
 }
 

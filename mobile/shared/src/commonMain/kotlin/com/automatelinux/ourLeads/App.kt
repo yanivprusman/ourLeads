@@ -788,7 +788,10 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     val forced = hide.any { it in setOf("contact", "address", "price") }
     val effective = if (forced) hide + "history" else hide
-    val photoWarning = "contact" in effective && "photos" !in effective && l.messages.any { it.mediaType == "image" }
+    // Without the customer's details, the server leaves out the photos that show his whole number
+    // (and any not checked yet) — say how many, so a card with fewer photos is not a surprise.
+    val images = l.messages.filter { it.mediaType == "image" && it.mediaUrl != null }
+    val dropped = if ("contact" in effective && "photos" !in effective) images.count { it.phoneShown != "none" && it.phoneShown != "partial" } else 0
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
@@ -810,8 +813,8 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
                         if (locked) T("  · יורדת יחד עם השאר", 12, color = Muted)
                     }
                 }
-                if (photoWarning) T(
-                    "צילומי מסך מהשיחה עם הלקוח מראים לרוב את המספר שלו. כדי להסתיר אותו לגמרי — גם בלי תמונות.", 12, color = Color(0xFF8A4A0B),
+                if (dropped > 0) T(
+                    "${if (dropped == images.size) "כל התמונות" else "$dropped מתוך ${images.size} תמונות"} לא ייכנסו לכרטיס — רואים בהן את המספר של הלקוח, או שעוד לא נבדקו.", 12, color = Color(0xFF8A4A0B),
                     modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFFF1DF)).padding(10.dp),
                 )
                 error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 8.dp)) }

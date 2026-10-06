@@ -6,6 +6,7 @@ import { askJson } from "./claude";
 import { cleanDate, cleanDateTime, describeCalendar, describeDeal, sayWhen, todayLine } from "./deal";
 import { transcribe } from "./transcribe";
 import { claimCardLink } from "./shares";
+import { classifyPhotos } from "./photoPhones";
 import {
   STATUSES,
   STATUS_LABELS,
@@ -57,6 +58,7 @@ export async function tick(): Promise<void> {
   try {
     await pull();
     for (const s of SOURCES) await processSource(s);
+    await classifyPhotos(log);
   } catch (e) {
     log("tick failed:", (e as Error).message);
   } finally {

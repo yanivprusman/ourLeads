@@ -186,7 +186,14 @@ export function cardView(token: string) {
           subPrice: lead.sub_price,
           subVat: lead.sub_vat === null ? null : !!lead.sub_vat,
         },
-    photos: hide.has("photos") ? [] : views.filter((m) => m.mediaType === "image" && m.mediaUrl).map((m) => m.mediaUrl!),
+    // Without the customer's details, a photo that shows the whole number goes too — and so
+    // does one not checked yet (lib/photoPhones.ts). Part of a number stays: it reaches no one.
+    photos: hide.has("photos")
+      ? []
+      : views
+          .filter((m) => m.mediaType === "image" && m.mediaUrl)
+          .filter((m) => !hide.has("contact") || m.phoneShown === "none" || m.phoneShown === "partial")
+          .map((m) => m.mediaUrl!),
     timeline: hide.has("history")
       ? []
       : [

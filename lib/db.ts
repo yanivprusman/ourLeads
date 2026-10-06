@@ -159,6 +159,9 @@ export function getDb(): DatabaseSync {
     ["holder", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
+  // Whether a photo shows the customer's phone number (lib/photoPhones.ts): none | partial | full, null = not looked at yet.
+  const msgCols = new Set((db.prepare("PRAGMA table_info(messages)").all() as { name: string }[]).map((c) => c.name));
+  if (!msgCols.has("phone_shown")) db.exec("ALTER TABLE messages ADD COLUMN phone_shown TEXT");
   // The old pipeline → the three states. Idempotent: rows already converted match no WHEN.
   db.exec(`
     UPDATE leads SET status = CASE
@@ -232,6 +235,7 @@ export interface MessageRow {
   lead_id: number | null;
   state: string;
   error: string | null;
+  phone_shown: "none" | "partial" | "full" | null;
 }
 
 export interface EventRow {

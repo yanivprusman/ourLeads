@@ -14,6 +14,8 @@ data class Msg(
     val transcript: String? = null,
     val error: String? = null,
     val source: String? = null,
+    /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */
+    val phoneShown: String? = null,
 )
 
 @Serializable

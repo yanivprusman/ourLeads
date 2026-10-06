@@ -39,7 +39,10 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
   const [shares, setShares] = useState<Share[]>([]);
   const historyForced = FORCES_HISTORY.some((f) => hide.has(f));
   const effective = new Set<Field>(historyForced ? [...hide, "history"] : hide);
-  const contactInPhotos = effective.has("contact") && !effective.has("photos") && lead.messages.some((m) => m.mediaType === "image");
+  // Without the customer's details, the server leaves out the photos that show his whole number
+  // (and any not checked yet); say how many, so a card with fewer photos is not a surprise.
+  const images = lead.messages.filter((m) => m.mediaType === "image" && m.mediaUrl);
+  const dropped = effective.has("contact") && !effective.has("photos") ? images.filter((m) => m.phoneShown !== "none" && m.phoneShown !== "partial").length : 0;
 
   const [version, setVersion] = useState(0);
   const load = () => setVersion((v) => v + 1);
@@ -125,7 +128,11 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
             );
           })}
         </div>
-        {contactInPhotos && <p className="text-xs text-[#8a4a0b] bg-amber-soft rounded-xl px-3 py-2">שימו לב: צילומי מסך מהשיחה עם הלקוח מראים לרוב את המספר שלו. כדי להסתיר אותו לגמרי — גם בלי תמונות.</p>}
+        {dropped > 0 && (
+          <p className="text-xs text-[#8a4a0b] bg-amber-soft rounded-xl px-3 py-2">
+            {dropped === images.length ? "כל התמונות" : `${dropped} מתוך ${images.length} תמונות`} לא ייכנסו לכרטיס — רואים בהן את המספר של הלקוח, או שעוד לא נבדקו.
+          </p>
+        )}
 
         {!made ? (
           <button

@@ -8,6 +8,8 @@ export interface Msg {
   mediaUrl: string | null;
   transcript: string | null;
   error: string | null;
+  /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */
+  phoneShown?: "none" | "partial" | "full" | null;
   source?: string;
 }
 
