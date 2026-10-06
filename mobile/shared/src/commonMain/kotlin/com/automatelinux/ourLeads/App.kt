@@ -13,6 +13,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,6 +44,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -220,7 +223,8 @@ private fun BoardScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var view by remember { mutableStateOf("open") }
     var source by remember { mutableStateOf("all") }
-    var ball by remember { mutableStateOf("all") } // "all" or a user id: whose hands the lead is in
+    // Whose hands the lead is in — any of these ids (user ids, the customer, NOBODY). Empty = everyone (הכל).
+    var balls by remember { mutableStateOf(emptySet<String>()) }
     var mode by remember { mutableStateOf("leads") }
     var openId by remember { mutableStateOf<Int?>(null) }
     var reply by remember { mutableStateOf<CommandReply?>(null) }
@@ -251,7 +255,7 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, ball, mode, onView = { view = it }, onSource = { source = it }, onBall = { ball = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
+            LeadList(d, error, view, source, balls, mode, onView = { view = it }, onSource = { source = it }, onBalls = { balls = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
             AnimatedVisibility(
                 reply != null, Modifier.align(Alignment.BottomCenter),
                 enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut(),
@@ -284,13 +288,14 @@ private fun BoardScreen() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LeadList(
-    d: BoardData, error: String?, view: String, source: String, ball: String, mode: String,
-    onView: (String) -> Unit, onSource: (String) -> Unit, onBall: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
+    d: BoardData, error: String?, view: String, source: String, balls: Set<String>, mode: String,
+    onView: (String) -> Unit, onSource: (String) -> Unit, onBalls: (Set<String>) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
-    val inSource = d.leads.filter { (source == "all" || it.source == source) && (ball == "all" || when (ball) { NOBODY -> it.holder == null; d.customer.id -> it.holder == ball; else -> it.holder == ball || it.checkBackDue }) }
+    val inSource = d.leads.filter { (source == "all" || it.source == source) && (balls.isEmpty() || balls.any { b -> when (b) { NOBODY -> it.holder == null; d.customer.id -> it.holder == b; else -> it.holder == b || it.checkBackDue } }) }
     val leads = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
+    val haptic = LocalHapticFeedback.current
 
     val header: @Composable () -> Unit = {
             Column(Modifier.fillMaxWidth().background(Band).statusBarsPadding().padding(top = 14.dp, bottom = 16.dp)) {
@@ -340,11 +345,15 @@ private fun LeadList(
                 Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
             ) {
                 (listOf("all" to "הכל") + d.people.map { it.id to holderLabel(d, it.id) } + (d.customer.id to holderLabel(d, d.customer.id)) + (NOBODY to "אצל אף אחד")).forEach { (id, label) ->
-                    val sel = id == ball
+                    val sel = if (id == "all") balls.isEmpty() else id in balls
                     T(
                         label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f),
                         Modifier.clip(CircleShape).background(if (sel) Color.White else Color.Transparent)
-                            .clickable { onBall(id) }.padding(horizontal = 14.dp, vertical = 7.dp),
+                            // הכל clears the rest. Any other chip: a tap adds or drops it, a long press shows it alone.
+                            .combinedClickable(
+                                onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onBalls(if (id == "all") emptySet() else setOf(id)) },
+                                onClick = { onBalls(if (id == "all") emptySet() else if (id in balls) balls - id else balls + id) },
+                            ).padding(horizontal = 14.dp, vertical = 7.dp),
                     )
                 }
             }

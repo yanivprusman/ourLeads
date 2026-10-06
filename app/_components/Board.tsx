@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LeadDetail from "./LeadDetail";
 import VoiceDock, { type CommandReply } from "./VoiceDock";
 import Mark from "./Mark";
@@ -32,7 +32,8 @@ export default function Board() {
   const [view, setView] = useState<View>("open");
   const [mode, setMode] = useState<"leads" | "calendar">("leads");
   const [source, setSource] = useState<string>("all");
-  const [ball, setBall] = useState<string>("all"); // "all" or a user id: whose hands the lead is in
+  // Whose hands the lead is in — any of these ids (user ids, the customer, NOBODY). Empty = everyone (הכל).
+  const [balls, setBalls] = useState<string[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
   const [reply, setReply] = useState<CommandReply | null>(null);
 
@@ -60,8 +61,8 @@ export default function Board() {
   }, [load]);
 
   const inSource = useMemo(
-    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (ball === "all" || (ball === NOBODY ? !l.holder : ball === data?.customer.id ? l.holder === ball : onPlate(l, ball)))),
-    [data, source, ball],
+    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (!balls.length || balls.some((b) => (b === NOBODY ? !l.holder : b === data?.customer.id ? l.holder === b : onPlate(l, b))))),
+    [data, source, balls],
   );
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -141,16 +142,15 @@ export default function Board() {
           </div>
           <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
             {[{ id: "all", label: "הכל" }, ...data.people.map((p) => ({ id: p.id, label: holderLabel(data, p.id) })), { id: data.customer.id, label: holderLabel(data, data.customer.id) }, { id: NOBODY, label: "אצל אף אחד" }].map((p) => (
-              <button
+              <BallChip
                 key={p.id}
-                data-id={`filter-holder-${p.id}`}
-                onClick={() => setBall(p.id)}
-                className={`rounded-full px-3.5 py-1.5 transition cursor-pointer ${
-                  ball === p.id ? "bg-white text-ink font-semibold shadow" : "text-white/80 hover:text-white"
-                }`}
-              >
-                {p.label}
-              </button>
+                id={p.id}
+                label={p.label}
+                on={p.id === "all" ? !balls.length : balls.includes(p.id)}
+                // הכל clears the rest. Any other chip: a tap adds or drops it, a long press shows it alone.
+                onTap={() => setBalls((b) => (p.id === "all" ? [] : b.includes(p.id) ? b.filter((x) => x !== p.id) : [...b, p.id]))}
+                onLongPress={() => setBalls(p.id === "all" ? [] : [p.id])}
+              />
             ))}
           </div>
           </div>
@@ -245,6 +245,40 @@ function Stage({
         {dot && <span className={`size-1.5 rounded-full ${dot}`} />}
         {label}
       </div>
+    </button>
+  );
+}
+
+/** A ball-filter chip: tap toggles it, long press (500 ms) shows only it. */
+function BallChip({ id, label, on, onTap, onLongPress }: { id: string; label: string; on: boolean; onTap: () => void; onLongPress: () => void }) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const clear = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  return (
+    <button
+      data-id={`filter-holder-${id}`}
+      onPointerDown={() => {
+        held.current = false;
+        clear();
+        timer.current = setTimeout(() => {
+          held.current = true;
+          navigator.vibrate?.(20);
+          onLongPress();
+        }, 500);
+      }}
+      onPointerUp={clear}
+      onPointerLeave={clear}
+      onPointerCancel={clear}
+      onContextMenu={(e) => e.preventDefault()}
+      onClick={() => !held.current && onTap()}
+      className={`rounded-full px-3.5 py-1.5 transition cursor-pointer select-none [-webkit-touch-callout:none] ${
+        on ? "bg-white text-ink font-semibold shadow" : "text-white/80 hover:text-white"
+      }`}
+    >
+      {label}
     </button>
   );
 }
