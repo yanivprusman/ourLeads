@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asUser } from "@/lib/http";
 import { addEvent, getLead, isStatus, logFieldEdits, setHolder, updateLead, type LeadPatch } from "@/lib/db";
-import { users } from "@/lib/config";
+import { CUSTOMER, users } from "@/lib/config";
 import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal } from "@/lib/deal";
 
 export const runtime = "nodejs";
@@ -15,9 +15,16 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     if (body.status !== undefined && !isStatus(body.status))
       return NextResponse.json({ error: "unknown status" }, { status: 400 });
     const people = users();
-    const holder = "holder" in body ? (body.holder === null ? null : people.find((u) => u.id === body.holder)) : undefined;
-    if (holder === undefined && "holder" in body)
+    const ballTo = [...people, CUSTOMER];
+    // A new check-back date on its own means "give the customer until then" — the ball is his.
+    const checkBack = "checkBackAt" in body ? cleanDate(body.checkBackAt) : null;
+    if ("checkBackAt" in body && !checkBack) return NextResponse.json({ error: "checkBackAt must be YYYY-MM-DD" }, { status: 400 });
+    const holderId = "holder" in body ? body.holder : checkBack ? CUSTOMER.id : undefined;
+    const holder = holderId === undefined ? undefined : holderId === null ? null : ballTo.find((u) => u.id === holderId);
+    if (holder === undefined && holderId !== undefined)
       return NextResponse.json({ error: "unknown holder" }, { status: 400 });
+    if (checkBack && holder?.id !== CUSTOMER.id)
+      return NextResponse.json({ error: "checkBackAt only goes with the customer holding the ball" }, { status: 400 });
     const patch: LeadPatch = {};
     const str = (k: string) => (body[k] === null ? null : String(body[k]).trim() || null);
     if (typeof body.title === "string" && body.title.trim()) patch.title = body.title.trim();
@@ -52,7 +59,7 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(id, user.name, "calendar", describeCalendar(lead));
     logFieldEdits(before, lead, user.name);
     if (holder !== undefined)
-      setHolder(id, user.name, holder, people.find((u) => u.id === before.holder)?.name ?? null);
+      setHolder(id, user.name, holder, ballTo.find((u) => u.id === before.holder)?.name ?? null, checkBack);
     return NextResponse.json({ ok: true, id: lead.id });
   });
 }

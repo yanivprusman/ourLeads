@@ -40,6 +40,16 @@ export interface User {
 }
 
 /**
+ * The ball can also be in the customer's hands: we are waiting on him (a price to think over,
+ * photos to send, a date to confirm). Then nobody owns the next move until `check_back_at`,
+ * when it becomes BOTH partners' move — whoever reaches him first takes the ball back.
+ */
+export const CUSTOMER = { id: "customer", name: "הלקוח" } as const;
+
+/** Days we give the customer when the ball is passed to him without a date. */
+export const CUSTOMER_DAYS = 3;
+
+/**
  * The people who may use the board. `OURLEADS_USERS` is a JSON object
  * `{ "<id>": { "name": "<shown name>", "token": "<secret>" } }`.
  *
@@ -61,6 +71,7 @@ export function users(): User[] {
     token: String(u.token ?? "").trim(),
   }));
   for (const u of list) {
+    if (u.id === CUSTOMER.id) throw new Error(`OURLEADS_USERS may not use the id "${CUSTOMER.id}" — it means the customer holds the ball`);
     if (!u.name || u.token.length < 24)
       throw new Error(`OURLEADS_USERS.${u.id} needs a name and a token of at least 24 characters`);
   }

@@ -1,6 +1,6 @@
 import "server-only";
 import { askJson } from "./claude";
-import { SOURCES, users } from "./config";
+import { CUSTOMER, CUSTOMER_DAYS, SOURCES, users } from "./config";
 import { STATUS_GUIDE, describeLeads } from "./ingest";
 import { STATUS_LABELS, addEvent, getDb, getLead, isStatus, logFieldEdits, now, setHolder, updateLead } from "./db";
 import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal, todayLine } from "./deal";
@@ -52,8 +52,10 @@ interface Answer {
     meetingAt?: string | null;
     workStart?: string | null;
     workEnd?: string | null;
-    /** A user id: the lead is passed into that person's hands. */
+    /** A user id, or "customer": the lead is passed into those hands. */
     holder?: string | null;
+    /** holder "customer" only: "YYYY-MM-DD", the day we check back with him. */
+    checkBackAt?: string | null;
   }[];
   create?: {
     source: string;
@@ -100,6 +102,7 @@ const COMMAND_SCHEMA = {
           workStart: s,
           workEnd: s,
           holder: s,
+          checkBackAt: s,
         },
         required: ["leadId"],
       },
@@ -159,6 +162,8 @@ details: רק כשנאמר תיאור חדש של העבודה שמחליף את
 העברת ליד — אצל מי הליד עכשיו (מי צריך לטפל בו הלאה): holder הוא מזהה של אחד מהשותפים: ${people}.
 מי שמדבר עכשיו: ${who.id} (${who.name}).
 "תעביר לדודו" / "תעביר את הליד לדודו" / "זה אצל דודו עכשיו" → holder "dudu". "תעביר אליי" / "זה אצלי" / "אני לוקח את זה" → holder "${who.id}".
+הכדור אצל הלקוח — כשמחכים לו (שיחשוב על המחיר, ישלח תמונות, יאשר תאריך) → holder "customer", ואז אחרי כמה ימים שנינו בודקים איתו.
+checkBackAt: היום שבו בודקים איתו, "YYYY-MM-DD". "הכדור אצל הלקוח" / "מחכים לו" בלי זמן → checkBackAt null (ברירת המחדל ${CUSTOMER_DAYS} ימים). "תבדוק איתו ביום ראשון" / "נחזור אליו בעוד שבוע" → התאריך הזה.
 העברה בלבד אינה משנה status ואינה דורשת note.
 יומן (${todayLine()}):
 - meetingAt: פגישה/ביקור אצל לקוח שעוד אין איתו חוזה, "YYYY-MM-DDTHH:MM" שעון ישראל. "חמישי בעשר" = יום חמישי הקרוב 10:00.
@@ -224,8 +229,10 @@ export async function runCommand(said: string, user: { id: string; name: string 
       patch.work_end = cleanDate(c.workEnd) ?? ws;
     }
     const status = isStatus(c.status) ? c.status : null;
-    const holder = c.holder ? people.find((u) => u.id === c.holder) : undefined;
-    if (holder) setHolder(c.leadId, who, holder, people.find((u) => u.id === before.holder)?.name ?? null);
+    const ballTo = [...people, CUSTOMER];
+    const checkBack = cleanDate(c.checkBackAt);
+    const holder = c.holder ? ballTo.find((u) => u.id === c.holder) : checkBack ? CUSTOMER : undefined;
+    if (holder) setHolder(c.leadId, who, holder, ballTo.find((u) => u.id === before.holder)?.name ?? null, holder.id === CUSTOMER.id ? checkBack : null);
     // A bare "pass it to Dudu" is fully told by the handover line; don't also log the sentence as a note.
     const onlyHandover = holder && !status && !c.note && Object.keys(patch).length === 0;
     const after = onlyHandover ? getLead(c.leadId)! : updateLead(c.leadId, who, patch, status, c.note ?? text);

@@ -1,6 +1,6 @@
 import "server-only";
-import { SOURCES, users } from "./config";
-import { STATUSES, STATUS_LABELS, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
+import { CUSTOMER, SOURCES, users } from "./config";
+import { STATUSES, STATUS_LABELS, customerDue, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
 import { mediaSig } from "./auth";
 
 /** The board as both clients read it: one payload, small enough to send whole. */
@@ -35,6 +35,9 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
     status: l.status,
     statusLabel: STATUS_LABELS[l.status],
     holder: l.holder,
+    /** holder = "customer" only: the day both of us check back with him, and whether it has come. */
+    checkBackAt: l.holder === CUSTOMER.id ? l.check_back_at : null,
+    checkBackDue: customerDue(l),
     nextStep: l.next_step,
     visitAt: l.visit_at,
     meetingAt: l.meeting_at,
@@ -94,6 +97,8 @@ export function board(me: { id: string; name: string }) {
     sources: SOURCES.map((s) => ({ id: s.id, label: s.label, actor: s.actor })),
     /** Who the ball can be passed to. */
     people: users().map((u) => ({ id: u.id, name: u.name })),
+    /** The ball's third place: the customer's hands (not one of `people`). */
+    customer: CUSTOMER,
     leads: leads.map((l) => leadView(l, byLead.get(l.id) ?? [], evByLead.get(l.id) ?? [])),
     unassigned: unassigned.slice(-40).reverse().map((m) => ({ ...messageView(m), source: m.source })),
     pending,

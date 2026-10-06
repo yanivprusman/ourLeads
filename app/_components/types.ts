@@ -34,8 +34,12 @@ export interface Lead {
   details: string | null;
   status: string;
   statusLabel: string;
-  /** The user id whose move it is ("the ball is in his hands"); null = nobody yet. */
+  /** The user id whose move it is ("the ball is in his hands"), "customer" while we wait for him; null = nobody yet. */
   holder: string | null;
+  /** holder = "customer" only: the day both of us check back with him ("2026-10-09"). */
+  checkBackAt: string | null;
+  /** That day has come: it is both partners' move. */
+  checkBackDue: boolean;
   nextStep: string | null;
   visitAt: string | null;
   /** "2026-10-09T10:00", Israel time — a meeting before there is a contract (green). */
@@ -84,14 +88,38 @@ export interface BoardData {
   sources: { id: string; label: string; actor: string }[];
   /** Who the ball can be passed to. */
   people: { id: string; name: string }[];
+  /** The ball's third place — the customer's hands. */
+  customer: { id: string; name: string };
   leads: Lead[];
   unassigned: Msg[];
   pending: number;
 }
 
-/** "אצלי" for whoever is looking, "אצל דודו" for anyone else. */
+/** "אצלי" for whoever is looking, "אצל דודו" for anyone else, "אצל הלקוח" while we wait for him. */
 export function holderLabel(data: BoardData, id: string): string {
+  if (id === data.customer.id) return `אצל ${data.customer.name}`;
   return id === data.me.id ? "אצלי" : `אצל ${data.people.find((p) => p.id === id)?.name ?? id}`;
+}
+
+/**
+ * Is it `person`'s move? Their own leads, plus every lead whose customer has had his time —
+ * then it is on both partners' lists until one of them takes the ball back.
+ */
+export function onPlate(l: Lead, person: string): boolean {
+  return l.holder === person || l.checkBackDue;
+}
+
+/** "2026-10-09" → "ה׳ 9.10" */
+export function shortDay(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return `${"אבגדהוש"[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}׳ ${d}.${m}`;
+}
+
+/** An Israel date `days` from today. */
+export function daysFromToday(days: number): string {
+  const today = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" }).slice(0, 10);
+  const [y, m, d] = today.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
 /** Where a lead stands: nothing yet, a meeting set, or work agreed — dates optional. */

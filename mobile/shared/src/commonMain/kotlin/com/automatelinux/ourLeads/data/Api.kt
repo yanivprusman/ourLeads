@@ -69,6 +69,13 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
+    /** The customer holds the ball until [day] ("2026-10-09"); then it is both partners' move. */
+    suspend fun setCheckBack(leadId: Int, day: String): Result<Unit> {
+        val body = JsonObject(mapOf("checkBackAt" to JsonPrimitive(day))).toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/leads/$leadId", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     /** Replace the deal on a lead. Empty fields clear. */
     suspend fun setDeal(leadId: Int, d: Deal): Result<Unit> {
         fun n(v: Double?) = v?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull

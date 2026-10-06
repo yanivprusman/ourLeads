@@ -10,6 +10,8 @@ import {
   STATES,
   STATUS_TONE,
   holderLabel,
+  onPlate,
+  shortDay,
   intlPhone,
   margin,
   shekel,
@@ -58,7 +60,7 @@ export default function Board() {
   }, [load]);
 
   const inSource = useMemo(
-    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (ball === "all" || (ball === NOBODY ? !l.holder : l.holder === ball))),
+    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (ball === "all" || (ball === NOBODY ? !l.holder : ball === data?.customer.id ? l.holder === ball : onPlate(l, ball)))),
     [data, source, ball],
   );
   const counts = useMemo(() => {
@@ -138,7 +140,7 @@ export default function Board() {
             ))}
           </div>
           <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
-            {[{ id: "all", label: "הכל" }, ...data.people.map((p) => ({ id: p.id, label: holderLabel(data, p.id) })), { id: NOBODY, label: "אצל אף אחד" }].map((p) => (
+            {[{ id: "all", label: "הכל" }, ...data.people.map((p) => ({ id: p.id, label: holderLabel(data, p.id) })), { id: data.customer.id, label: holderLabel(data, data.customer.id) }, { id: NOBODY, label: "אצל אף אחד" }].map((p) => (
               <button
                 key={p.id}
                 data-id={`filter-holder-${p.id}`}
@@ -274,7 +276,15 @@ function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOp
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <PartnerBadge source={l.source} data={data} />
-            {l.holder && (
+            {l.checkBackDue ? (
+              <span className="rounded-full px-2 py-0.5 text-[11.5px] font-bold bg-amber text-white" title="הלקוח קיבל את הזמן שלו — שנינו בודקים איתו">
+                לבדוק עם הלקוח
+              </span>
+            ) : l.holder === data.customer.id ? (
+              <span className="rounded-full px-2 py-0.5 text-[11.5px] font-semibold bg-amber-soft text-[#8a4a0b]">
+                {holderLabel(data, l.holder)}{l.checkBackAt ? ` · עד ${shortDay(l.checkBackAt)}` : ""}
+              </span>
+            ) : l.holder && (
               <span
                 className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${
                   l.holder === data.me.id ? "bg-harbour text-white" : "bg-[#e6eef5] text-harbour"

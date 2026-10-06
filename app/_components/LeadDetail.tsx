@@ -8,7 +8,9 @@ import {
   PARTNER_TONE,
   STATES,
   STATUS_TONE,
+  daysFromToday,
   intlPhone,
+  shortDay,
   prettyPhone,
   wazeUrl,
   when,
@@ -242,25 +244,70 @@ export default function LeadDetail({
           </div>
 
           {/* Whose move it is. Passing the ball says "I've done my part — it's yours until
-              you pass it back". Separate from the status: a lead at פגישה can be in either hands. */}
+              you pass it back". Separate from the status: a lead at פגישה can be in either hands.
+              The customer is the third place: we wait for him until a day, then it is both partners' move. */}
           {data.people.length > 0 && (
-            <div className="bg-white rounded-2xl border border-line p-3 flex items-center gap-2">
-              <span className="text-sm font-semibold text-ink-2 px-1">הכדור אצל</span>
-              <div className="flex-1 grid gap-1 rounded-xl bg-paper p-1" style={{ gridTemplateColumns: `repeat(${data.people.length}, minmax(0, 1fr))` }}>
-                {data.people.map((p) => (
-                  <button
-                    key={p.id}
-                    data-id={`lead-holder-${p.id}`}
-                    disabled={busy}
-                    onClick={() => p.id !== lead.holder && !busy && patch({ holder: p.id })}
-                    className={`rounded-lg py-2 text-sm transition cursor-pointer disabled:cursor-wait ${
-                      p.id === lead.holder ? "bg-harbour text-white font-bold shadow-sm" : "text-muted hover:text-ink hover:bg-white"
-                    }`}
-                  >
-                    {p.id === data.me.id ? `${p.name} (אני)` : p.name}
-                  </button>
-                ))}
+            <div className="bg-white rounded-2xl border border-line p-3 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-ink-2 px-1">הכדור אצל</span>
+                <div className="flex-1 grid gap-1 rounded-xl bg-paper p-1" style={{ gridTemplateColumns: `repeat(${data.people.length + 1}, minmax(0, 1fr))` }}>
+                  {[...data.people, data.customer].map((p) => (
+                    <button
+                      key={p.id}
+                      data-id={`lead-holder-${p.id}`}
+                      disabled={busy}
+                      onClick={() => p.id !== lead.holder && !busy && patch({ holder: p.id })}
+                      className={`rounded-lg py-2 text-sm transition cursor-pointer disabled:cursor-wait ${
+                        p.id === lead.holder
+                          ? p.id === data.customer.id
+                            ? "bg-amber text-white font-bold shadow-sm"
+                            : "bg-harbour text-white font-bold shadow-sm"
+                          : "text-muted hover:text-ink hover:bg-white"
+                      }`}
+                    >
+                      {p.id === data.me.id ? `${p.name} (אני)` : p.name}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {lead.holder === data.customer.id && (
+                <div className={`rounded-xl px-3 py-2.5 text-sm ${lead.checkBackDue ? "bg-amber text-white" : "bg-amber-soft text-[#8a4a0b]"}`}>
+                  <p className="font-semibold">
+                    {lead.checkBackDue
+                      ? "הגיע הזמן לבדוק עם הלקוח — זה אצל שנינו. מי שמדבר איתו לוקח את הכדור."
+                      : `מחכים ללקוח. ${lead.checkBackAt ? `ב${shortDay(lead.checkBackAt)}` : "בעוד כמה ימים"} זה חוזר לשנינו.`}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className={lead.checkBackDue ? "text-white/85" : "text-[#8a4a0b]/80"}>{lead.checkBackDue ? "לתת לו עוד:" : "לבדוק איתו:"}</span>
+                    {[
+                      { days: 1, label: "מחר" },
+                      { days: 3, label: "3 ימים" },
+                      { days: 7, label: "שבוע" },
+                    ].map((o) => (
+                      <button
+                        key={o.days}
+                        data-id={`lead-check-back-${o.days}`}
+                        disabled={busy}
+                        onClick={() => patch({ checkBackAt: daysFromToday(o.days) })}
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold transition cursor-pointer disabled:opacity-50 disabled:cursor-wait ${
+                          lead.checkBackDue ? "bg-white/20 hover:bg-white/30 text-white" : "bg-white hover:bg-[#fff7ed] text-[#8a4a0b] border border-[#f5c58a]"
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                    <input
+                      data-id="lead-check-back-date"
+                      type="date"
+                      disabled={busy}
+                      min={daysFromToday(0)}
+                      value={lead.checkBackAt ?? ""}
+                      onChange={(e) => e.target.value && patch({ checkBackAt: e.target.value })}
+                      className="rounded-lg border border-[#f5c58a] bg-white px-2 py-1 text-xs text-ink outline-none cursor-pointer"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

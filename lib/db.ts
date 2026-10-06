@@ -2,7 +2,7 @@ import "server-only";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { dataDir } from "./config";
+import { CUSTOMER, CUSTOMER_DAYS, dataDir } from "./config";
 
 /**
  * One SQLite file. The board is two people and a few leads a day; a database
@@ -157,6 +157,8 @@ export function getDb(): DatabaseSync {
     ["work_end", "TEXT"],
     // Whose hands the ball is in — a user id from OURLEADS_USERS, or null for nobody yet.
     ["holder", "TEXT"],
+    // holder = "customer": the day ("2026-10-09") both partners should check back with him.
+    ["check_back_at", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
   // Whether a photo shows the customer's phone number (lib/photoPhones.ts): none | partial | full, null = not looked at yet.
@@ -217,6 +219,8 @@ export interface LeadRow {
   work_end: string | null;
   /** The user id (OURLEADS_USERS) whose move it is; null = nobody has taken it yet. */
   holder: string | null;
+  /** Only while holder = "customer": the day both partners check back with him ("2026-10-09"). */
+  check_back_at: string | null;
   created_at: string;
   updated_at: string;
   last_message_at: string | null;
@@ -334,16 +338,53 @@ export function logFieldEdits(before: LeadRow, after: LeadRow, who: string): voi
   }
 }
 
+/** Today in Israel, "2026-10-06". */
+export function israelToday(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" }).slice(0, 10);
+}
+
+/** `days` after an Israel date, as an Israel date. */
+export function addDays(day: string, days: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** The customer has had his time: it is both partners' move now. */
+export function customerDue(l: Pick<LeadRow, "holder" | "check_back_at">): boolean {
+  return l.holder === CUSTOMER.id && !!l.check_back_at && l.check_back_at <= israelToday();
+}
+
 /**
  * Pass the ball: the lead is now in `holder`'s hands until they pass it back.
  * Logged as "הכדור: יניב ← דודו" so the history says who handed it over and when.
+ *
+ * `holder.id === "customer"` means we wait for him until `checkBack` (default: CUSTOMER_DAYS
+ * from today); then it is both partners' move. Passing it to the customer again only moves the date.
  */
-export function setHolder(id: number, who: string, holder: { id: string; name: string } | null, fromName: string | null): void {
+export function setHolder(
+  id: number,
+  who: string,
+  holder: { id: string; name: string } | null,
+  fromName: string | null,
+  checkBack: string | null = null,
+): void {
   const lead = getLead(id);
   if (!lead) throw new Error(`no lead #${id}`);
-  if ((lead.holder ?? null) === (holder?.id ?? null)) return;
-  getDb().prepare("UPDATE leads SET holder = ?, updated_at = ? WHERE id = ?").run(holder?.id ?? null, now(), id);
-  addEvent(id, who, "holder", `הכדור: ${fromName ?? "אף אחד"} ← ${holder?.name ?? "אף אחד"}`);
+  const toCustomer = holder?.id === CUSTOMER.id;
+  const until = toCustomer ? (checkBack ?? (lead.holder === CUSTOMER.id && lead.check_back_at ? lead.check_back_at : addDays(israelToday(), CUSTOMER_DAYS))) : null;
+  if ((lead.holder ?? null) === (holder?.id ?? null) && (lead.check_back_at ?? null) === until) return;
+  getDb().prepare("UPDATE leads SET holder = ?, check_back_at = ?, updated_at = ? WHERE id = ?").run(holder?.id ?? null, until, now(), id);
+  if ((lead.holder ?? null) === (holder?.id ?? null))
+    addEvent(id, who, "holder", `בודקים שוב עם הלקוח ב${sayDate(until!)}`);
+  else
+    addEvent(id, who, "holder", `הכדור: ${fromName ?? "אף אחד"} ← ${holder?.name ?? "אף אחד"}${until ? ` · בודקים איתו שוב ב${sayDate(until)}` : ""}`);
+}
+
+const DAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+/** "יום חמישי 9.10" */
+function sayDate(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return `יום ${DAY_NAMES[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d}.${m}`;
 }
 
 export function updateLead(

@@ -287,7 +287,7 @@ private fun LeadList(
     d: BoardData, error: String?, view: String, source: String, ball: String, mode: String,
     onView: (String) -> Unit, onSource: (String) -> Unit, onBall: (String) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
-    val inSource = d.leads.filter { (source == "all" || it.source == source) && (ball == "all" || if (ball == NOBODY) it.holder == null else it.holder == ball) }
+    val inSource = d.leads.filter { (source == "all" || it.source == source) && (ball == "all" || when (ball) { NOBODY -> it.holder == null; d.customer.id -> it.holder == ball; else -> it.holder == ball || it.checkBackDue }) }
     val leads = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
@@ -339,7 +339,7 @@ private fun LeadList(
             if (d.people.isNotEmpty()) Row(
                 Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
             ) {
-                (listOf("all" to "הכל") + d.people.map { it.id to holderLabel(d, it.id) } + (NOBODY to "אצל אף אחד")).forEach { (id, label) ->
+                (listOf("all" to "הכל") + d.people.map { it.id to holderLabel(d, it.id) } + (d.customer.id to holderLabel(d, d.customer.id)) + (NOBODY to "אצל אף אחד")).forEach { (id, label) ->
                     val sel = id == ball
                     T(
                         label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f),
@@ -433,7 +433,11 @@ private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onE
                         PartnerBadge(l.source, d.sources.firstOrNull { it.id == l.source }?.label)
                         l.holder?.let {
                             Spacer(Modifier.width(8.dp))
-                            Pill(holderLabel(d, it), if (it == d.me.id) Harbour else Color(0xFFE6EEF5), if (it == d.me.id) Color.White else Harbour)
+                            when {
+                                l.checkBackDue -> Pill("לבדוק עם הלקוח", Amber, Color.White)
+                                it == d.customer.id -> Pill(holderLabel(d, it) + (l.checkBackAt?.let { c -> " · עד ${sayDay(c)}" } ?: ""), AmberSoft, Color(0xFF8A4A0B))
+                                else -> Pill(holderLabel(d, it), if (it == d.me.id) Harbour else Color(0xFFE6EEF5), if (it == d.me.id) Color.White else Harbour)
+                            }
                         }
                         Spacer(Modifier.weight(1f))
                         when (l.status) {
@@ -668,7 +672,16 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                 }
             }
             if (d.people.isNotEmpty()) item {
-                HolderPicker(d, l, busy) { id ->
+                HolderPicker(d, l, busy, onCheckBack = { day ->
+                    busy = true
+                    scope.launch {
+                        when (val r = api.setCheckBack(l.id, day)) {
+                            is Result.Ok -> { error = null; onChanged() }
+                            is Result.Err -> error = r.message
+                        }
+                        busy = false
+                    }
+                }) { id ->
                     busy = true
                     scope.launch {
                         when (val r = api.setHolder(l.id, id)) {
@@ -869,28 +882,61 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
 /** The ball filter for leads nobody has taken yet — not a user id (ids come from OURLEADS_USERS). */
 private const val NOBODY = "nobody"
 
-private fun holderLabel(d: BoardData, id: String): String =
-    if (id == d.me.id) "אצלי" else "אצל ${d.people.firstOrNull { it.id == id }?.name ?: id}"
+private fun holderLabel(d: BoardData, id: String): String = when (id) {
+    d.customer.id -> "אצל ${d.customer.name}"
+    d.me.id -> "אצלי"
+    else -> "אצל ${d.people.firstOrNull { it.id == id }?.name ?: id}"
+}
+
+/** An Israel date [days] from today, "2026-10-09". */
+private fun daysFromToday(days: Int): String =
+    Clock.System.now().toLocalDateTime(tz).date.plus(days, kotlinx.datetime.DateTimeUnit.DAY).toString()
 
 /**
  * Whose move it is. Passing the ball says "I've done my part — it's yours until you
  * pass it back". It is separate from the status: a lead at פגישה can be in either hands.
+ * The customer is the third place: we wait for him until a day, then it is both partners' move.
  */
 @Composable
-private fun HolderPicker(d: BoardData, l: Lead, busy: Boolean, onPass: (String) -> Unit) {
+private fun HolderPicker(d: BoardData, l: Lead, busy: Boolean, onCheckBack: (String) -> Unit, onPass: (String) -> Unit) {
     Surface(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, Line)) {
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            T("הכדור אצל", 14, FontWeight.SemiBold, Ink2, Modifier.padding(horizontal = 6.dp))
-            Spacer(Modifier.width(6.dp))
-            Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Paper).padding(4.dp)) {
-                d.people.forEach { p ->
-                    val sel = p.id == l.holder
-                    Box(
-                        Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (sel) Harbour else Color.Transparent)
-                            .clickable(enabled = !busy && !sel) { onPass(p.id) }.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        T(if (p.id == d.me.id) "${p.name} (אני)" else p.name, 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) Color.White else Muted)
+        Column(Modifier.padding(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T("הכדור אצל", 14, FontWeight.SemiBold, Ink2, Modifier.padding(horizontal = 6.dp))
+                Spacer(Modifier.width(6.dp))
+                Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Paper).padding(4.dp)) {
+                    (d.people + d.customer).forEach { p ->
+                        val sel = p.id == l.holder
+                        val on = if (p.id == d.customer.id) Amber else Harbour
+                        Box(
+                            Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (sel) on else Color.Transparent)
+                                .clickable(enabled = !busy && !sel) { onPass(p.id) }.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            T(if (p.id == d.me.id) "${p.name} (אני)" else p.name, 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) Color.White else Muted)
+                        }
+                    }
+                }
+            }
+            if (l.holder == d.customer.id) {
+                val due = l.checkBackDue
+                val fg = if (due) Color.White else Color(0xFF8A4A0B)
+                Column(Modifier.padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (due) Amber else AmberSoft).padding(12.dp)) {
+                    T(
+                        if (due) "הגיע הזמן לבדוק עם הלקוח — זה אצל שנינו. מי שמדבר איתו לוקח את הכדור."
+                        else "מחכים ללקוח. ${l.checkBackAt?.let { "ב${sayDay(it)}" } ?: "בעוד כמה ימים"} זה חוזר לשנינו.",
+                        14, FontWeight.SemiBold, fg,
+                    )
+                    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        T(if (due) "לתת לו עוד:" else "לבדוק איתו:", 13, color = fg.copy(alpha = .85f))
+                        listOf(1 to "מחר", 3 to "3 ימים", 7 to "שבוע").forEach { (n, label) ->
+                            Spacer(Modifier.width(6.dp))
+                            T(
+                                label, 13, FontWeight.SemiBold, fg,
+                                Modifier.clip(CircleShape).background(if (due) Color.White.copy(alpha = .22f) else Color.White)
+                                    .clickable(enabled = !busy) { onCheckBack(daysFromToday(n)) }.padding(horizontal = 12.dp, vertical = 7.dp),
+                            )
+                        }
                     }
                 }
             }
