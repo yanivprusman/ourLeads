@@ -1,8 +1,8 @@
 import "server-only";
 import { askJson } from "./claude";
-import { SOURCES } from "./config";
+import { SOURCES, users } from "./config";
 import { STATUS_GUIDE, describeLeads } from "./ingest";
-import { STATUS_LABELS, addEvent, getDb, getLead, isStatus, logFieldEdits, now, updateLead } from "./db";
+import { STATUS_LABELS, addEvent, getDb, getLead, isStatus, logFieldEdits, now, setHolder, updateLead } from "./db";
 import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal, todayLine } from "./deal";
 
 /**
@@ -52,6 +52,8 @@ interface Answer {
     meetingAt?: string | null;
     workStart?: string | null;
     workEnd?: string | null;
+    /** A user id: the lead is passed into that person's hands. */
+    holder?: string | null;
   }[];
   create?: {
     source: string;
@@ -97,6 +99,7 @@ const COMMAND_SCHEMA = {
           meetingAt: s,
           workStart: s,
           workEnd: s,
+          holder: s,
         },
         required: ["leadId"],
       },
@@ -124,11 +127,12 @@ const COMMAND_SCHEMA = {
   required: ["changes", "create", "reply"],
 };
 
-function buildPrompt(said: string, who: string, lead: { id: number; title: string } | null): string {
+function buildPrompt(said: string, who: { id: string; name: string }, lead: { id: number; title: string } | null): string {
   const about = lead
     ? `\nהדברים נאמרו על הכרטיס של ליד #${lead.id} (${lead.title}) — כל השינויים הם לליד הזה בלבד, leadId ${lead.id}, ואין ליצור לידים חדשים (create ריק).\n`
     : "";
-  return `אתה מנהל לוח לידים לשותפות עבודות גובה. ${who} אמר/ה עכשיו (תמלול של הקלטה, ייתכנו שגיאות שמיעה):
+  const people = users().map((u) => `${u.id} = ${u.name}`).join(", ");
+  return `אתה מנהל לוח לידים לשותפות עבודות גובה. ${who.name} אמר/ה עכשיו (תמלול של הקלטה, ייתכנו שגיאות שמיעה):
 """${said}"""
 ${about}
 לידים פתוחים:
@@ -152,6 +156,10 @@ status הוא אחד משלושה מצבים, ועוד יציאה: none (עוד 
 "זה לא חיזוק אריחים, זה איטום פסיפס" / "תשנה את העבודה לאיטום פסיפס" → trade "איטום פסיפס", ו-title חדש שבו סוג העבודה הוחלף והשאר נשמר (למשל "חיזוק אריחים בחזית – באר שבע" → "איטום פסיפס בחזית – באר שבע").
 "הכתובת היא הרצל 5" → address. "זה בדימונה, לא בבאר שבע" → city, ו-title מתוקן אם העיר מופיעה בו.
 details: רק כשנאמר תיאור חדש של העבודה שמחליף את הקיים.
+העברת ליד — אצל מי הליד עכשיו (מי צריך לטפל בו הלאה): holder הוא מזהה של אחד מהשותפים: ${people}.
+מי שמדבר עכשיו: ${who.id} (${who.name}).
+"תעביר לדודו" / "תעביר את הליד לדודו" / "זה אצל דודו עכשיו" → holder "dudu". "תעביר אליי" / "זה אצלי" / "אני לוקח את זה" → holder "${who.id}".
+העברה בלבד אינה משנה status ואינה דורשת note.
 יומן (${todayLine()}):
 - meetingAt: פגישה/ביקור אצל לקוח שעוד אין איתו חוזה, "YYYY-MM-DDTHH:MM" שעון ישראל. "חמישי בעשר" = יום חמישי הקרוב 10:00.
 - workStart/workEnd: ימי ביצוע העבודה כשיש חוזה, "YYYY-MM-DD". יום אחד → workEnd = workStart.
@@ -167,15 +175,17 @@ reply: משפט אחד או שניים בעברית, שאומר בדיוק מה 
  "reply":"..."}`;
 }
 
-export async function runCommand(said: string, who: string, leadId: number | null = null): Promise<CommandResult> {
+export async function runCommand(said: string, user: { id: string; name: string }, leadId: number | null = null): Promise<CommandResult> {
   const text = said.trim();
   if (!text) throw new Error("nothing was said");
+  const who = user.name;
+  const people = users();
   const d = getDb();
   const lead = leadId == null ? null : (getLead(leadId) ?? null);
   if (leadId != null && !lead) throw new Error(`lead ${leadId} not found`);
   let answer: Answer;
   try {
-    answer = await askJson<Answer>(buildPrompt(text, who, lead), COMMAND_SCHEMA);
+    answer = await askJson<Answer>(buildPrompt(text, user, lead), COMMAND_SCHEMA);
   } catch (e) {
     d.prepare("INSERT INTO commands (at, who, said, error) VALUES (?, ?, ?, ?)").run(now(), who, text, (e as Error).message);
     throw e;
@@ -214,7 +224,11 @@ export async function runCommand(said: string, who: string, leadId: number | nul
       patch.work_end = cleanDate(c.workEnd) ?? ws;
     }
     const status = isStatus(c.status) ? c.status : null;
-    const after = updateLead(c.leadId, who, patch, status, c.note ?? text);
+    const holder = c.holder ? people.find((u) => u.id === c.holder) : undefined;
+    if (holder) setHolder(c.leadId, who, holder, people.find((u) => u.id === before.holder)?.name ?? null);
+    // A bare "pass it to Dudu" is fully told by the handover line; don't also log the sentence as a note.
+    const onlyHandover = holder && !status && !c.note && Object.keys(patch).length === 0;
+    const after = onlyHandover ? getLead(c.leadId)! : updateLead(c.leadId, who, patch, status, c.note ?? text);
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "deal", describeDeal(after));
     if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "calendar", describeCalendar(after));
     logFieldEdits(before, after, who);
@@ -223,7 +237,7 @@ export async function runCommand(said: string, who: string, leadId: number | nul
       title: after.title,
       from: STATUS_LABELS[before.status],
       to: status && status !== before.status ? STATUS_LABELS[status] : null,
-      note: c.note ?? null,
+      note: c.note ?? (holder ? `עבר ל${holder.name}` : null),
     });
   }
   for (const c of answer.create ?? []) {

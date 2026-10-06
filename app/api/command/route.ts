@@ -43,6 +43,6 @@ export async function POST(request: Request) {
       said = String(body.text ?? "");
       leadId = Number(body.leadId) || null;
     }
-    return NextResponse.json(await runCommand(said, user.name, leadId));
+    return NextResponse.json(await runCommand(said, user, leadId));
   });
 }

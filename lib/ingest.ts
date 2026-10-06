@@ -1,7 +1,7 @@
 import "server-only";
 import path from "node:path";
 import { messagesSince, downloadMedia } from "./bridge";
-import { SOURCES, Source, dataDir, ingestSince } from "./config";
+import { SOURCES, Source, dataDir, ingestSince, users } from "./config";
 import { askJson } from "./claude";
 import { cleanDate, cleanDateTime, describeCalendar, describeDeal, sayWhen, todayLine } from "./deal";
 import { transcribe } from "./transcribe";
@@ -172,6 +172,7 @@ export function describeMessage(m: MessageRow, partner: string): string {
 export function describeLeads(): string {
   const leads = openLeads();
   if (!leads.length) return "(אין לידים פתוחים)";
+  const people = users();
   return leads
     .map((l) => {
       const phones = (JSON.parse(l.phones) as string[]).join(", ");
@@ -182,6 +183,7 @@ export function describeLeads(): string {
         (l.meeting_at ? ` | פגישה: ${sayWhen(l.meeting_at)}` : l.visit_at ? ` | ביקור: ${l.visit_at}` : "") +
         (l.work_start ? ` | עבודה: ${sayWhen(l.work_start)}${l.work_end && l.work_end !== l.work_start ? `–${sayWhen(l.work_end)}` : ""}` : "") +
         (l.next_step ? ` | הבא: ${l.next_step}` : "") +
+        (l.holder ? ` | אצל: ${people.find((u) => u.id === l.holder)?.name ?? l.holder}` : "") +
         (l.client_price != null || l.sub_price != null || l.sub_name ? ` | ${describeDeal(l)}` : "");
     })
     .join("\n");
