@@ -198,6 +198,29 @@ export default function LeadDetail({
             )}
           </div>
 
+          {/* Whose move it is. Passing the ball says "I've done my part — it's yours until
+              you pass it back". Separate from the status: a lead at פגישה can be in either hands. */}
+          {data.people.length > 0 && (
+            <div className="bg-white rounded-2xl border border-line p-3 flex items-center gap-2">
+              <span className="text-sm font-semibold text-ink-2 px-1">הכדור אצל</span>
+              <div className="flex-1 grid gap-1 rounded-xl bg-paper p-1" style={{ gridTemplateColumns: `repeat(${data.people.length}, minmax(0, 1fr))` }}>
+                {data.people.map((p) => (
+                  <button
+                    key={p.id}
+                    data-id={`lead-holder-${p.id}`}
+                    disabled={busy}
+                    onClick={() => p.id !== lead.holder && !busy && patch({ holder: p.id })}
+                    className={`rounded-lg py-2 text-sm transition cursor-pointer disabled:cursor-wait ${
+                      p.id === lead.holder ? "bg-harbour text-white font-bold shadow-sm" : "text-muted hover:text-ink hover:bg-white"
+                    }`}
+                  >
+                    {p.id === data.me.id ? `${p.name} (אני)` : p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <ScheduleCard key={`s${lead.id}-${lead.meetingAt}-${lead.workStart}-${lead.workEnd}`} lead={lead} busy={busy} onSave={(b) => patch(b)} />
 
           <DealCard key={lead.id} deal={lead.deal} busy={busy} onSave={(d) => patch(d)} />

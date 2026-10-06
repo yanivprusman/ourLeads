@@ -32,6 +32,8 @@ export interface Lead {
   details: string | null;
   status: string;
   statusLabel: string;
+  /** The user id whose move it is ("the ball is in his hands"); null = nobody yet. */
+  holder: string | null;
   nextStep: string | null;
   visitAt: string | null;
   /** "2026-10-09T10:00", Israel time — a meeting before there is a contract (green). */
@@ -78,9 +80,16 @@ export interface BoardData {
   me: { id: string; name: string };
   statuses: { id: string; label: string }[];
   sources: { id: string; label: string; partner: string }[];
+  /** Who the ball can be passed to. */
+  people: { id: string; name: string }[];
   leads: Lead[];
   unassigned: Msg[];
   pending: number;
+}
+
+/** "אצלי" for whoever is looking, "אצל דודו" for anyone else. */
+export function holderLabel(data: BoardData, id: string): string {
+  return id === data.me.id ? "אצלי" : `אצל ${data.people.find((p) => p.id === id)?.name ?? id}`;
 }
 
 /** Where a lead stands: nothing yet, a meeting set, or work agreed — dates optional. */

@@ -9,6 +9,7 @@ import {
   PARTNER_TONE,
   STATES,
   STATUS_TONE,
+  holderLabel,
   intlPhone,
   margin,
   shekel,
@@ -26,6 +27,7 @@ export default function Board() {
   const [view, setView] = useState<View>("open");
   const [mode, setMode] = useState<"leads" | "calendar">("leads");
   const [source, setSource] = useState<string>("all");
+  const [ball, setBall] = useState<string>("all"); // "all" or a user id: whose hands the lead is in
   const [openId, setOpenId] = useState<number | null>(null);
   const [reply, setReply] = useState<CommandReply | null>(null);
 
@@ -53,8 +55,8 @@ export default function Board() {
   }, [load]);
 
   const inSource = useMemo(
-    () => (data?.leads ?? []).filter((l) => source === "all" || l.source === source),
-    [data, source],
+    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (ball === "all" || l.holder === ball)),
+    [data, source, ball],
   );
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -129,6 +131,20 @@ export default function Board() {
                 }`}
               >
                 {s.label}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
+            {[{ id: "all", label: "הכל" }, ...data.people.map((p) => ({ id: p.id, label: holderLabel(data, p.id) }))].map((p) => (
+              <button
+                key={p.id}
+                data-id={`filter-holder-${p.id}`}
+                onClick={() => setBall(p.id)}
+                className={`rounded-full px-3.5 py-1.5 transition cursor-pointer ${
+                  ball === p.id ? "bg-white text-ink font-semibold shadow" : "text-white/80 hover:text-white"
+                }`}
+              >
+                {p.label}
               </button>
             ))}
           </div>
@@ -255,6 +271,15 @@ function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOp
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <PartnerBadge source={l.source} data={data} />
+            {l.holder && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${
+                  l.holder === data.me.id ? "bg-harbour text-white" : "bg-[#e6eef5] text-harbour"
+                }`}
+              >
+                {holderLabel(data, l.holder)}
+              </span>
+            )}
             {l.status !== "none" ? (
               <span className={`ms-auto rounded-full px-2 py-0.5 text-[11.5px] font-bold ${tone.pill}`}>
                 {l.statusLabel}
