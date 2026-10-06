@@ -57,7 +57,11 @@ export function users(): User[] {
 /**
  * The WhatsApp chats leads arrive from. Each entry names the partner on the
  * other end and the trades that are theirs — the split Dudu set on 2026-10-05:
- * building and facade work goes to Basis, pigeons and windows to Israel.
+ * building and facade work goes to Basis, pigeons and windows to סנפלינג ישראל.
+ *
+ * "ישראל" here is part of a business name, not a person: nobody called Israel
+ * is in this partnership. So a source carries an explicit `actor` (the name an
+ * event is signed with) instead of taking the first word of `partner`.
  */
 export interface Source {
   id: string;
@@ -65,6 +69,8 @@ export interface Source {
   label: string;
   /** Who is on the other end of the chat, as the extractor should call them. */
   partner: string;
+  /** The name an event from this chat is signed with on a lead's timeline. */
+  actor: string;
   trades: string;
 }
 
@@ -74,13 +80,15 @@ export const SOURCES: Source[] = [
     jid: "972533325272@s.whatsapp.net",
     label: "בסיס",
     partner: "דודו (בסיס עבודות בגובה)",
+    actor: "דודו",
     trades: "שיפוץ מעטפת: שיקום בטון, איטום קירות חיצוניים, חיזוק אריחים, צביעה, מרזבים, אינסטלציה חיצונית, תליית שלטים, פירוק אנטנות וכל עבודה בגובה סביב הבניין",
   },
   {
     id: "israel",
     jid: "972525407778@s.whatsapp.net",
     label: "סנפלינג ישראל",
-    partner: "ישראל (סנפלינג ישראל)",
+    partner: "העסק סנפלינג ישראל (שם של חברה, לא של אדם)",
+    actor: "סנפלינג ישראל",
     trades: "הרחקת יונים וניקוי חלונות",
   },
 ];

@@ -290,7 +290,7 @@ note: משפט קצר שמסביר מה השתנה (יוצג בהיסטוריה 
 ${describeLeads()}
 
 הודעות חדשות (המזהה בסוגריים משולשים):
-${msgs.map((m) => describeMessage(m, src.partner)).join("\n")}
+${msgs.map((m) => describeMessage(m, src.actor)).join("\n")}
 
 התשובה במבנה הבא:
 {"create":[{"messageIds":["..."],"title":"...","trade":"...","customerName":null,"phones":[],"address":null,"city":null,"details":"...","nextStep":null,"visitAt":null,"status":"none","note":null}],
@@ -376,16 +376,16 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
       const leadId = Number(r.lastInsertRowid);
       // Dated by the partner's first message, not by when the server got round to reading it.
       const firstAt = ids.map((i) => byId.get(i)!.sent_at).sort()[0];
-      addEvent(leadId, src.partner.split(" ")[0], "created", c.note ?? `ליד חדש מ${src.label}`, null, status, firstAt);
+      addEvent(leadId, src.actor, "created", c.note ?? `ליד חדש מ${src.label}`, null, status, firstAt);
       const deal = toPatch({ clientPrice: c.clientPrice, clientVat: c.clientVat, subName: c.subName, subPhone: c.subPhone, subPrice: c.subPrice, subVat: c.subVat });
       if (Object.keys(deal).length) {
-        const lead = updateLead(leadId, src.partner.split(" ")[0], deal, null, null);
-        addEvent(leadId, src.partner.split(" ")[0], "deal", describeDeal(lead), null, null, firstAt);
+        const lead = updateLead(leadId, src.actor, deal, null, null);
+        addEvent(leadId, src.actor, "deal", describeDeal(lead), null, null, firstAt);
       }
       const cal = toPatch({ meetingAt: c.meetingAt, workStart: c.workStart, workEnd: c.workEnd });
       if (Object.keys(cal).length) {
-        const lead = updateLead(leadId, src.partner.split(" ")[0], cal, null, null);
-        addEvent(leadId, src.partner.split(" ")[0], "calendar", describeCalendar(lead), null, null, firstAt);
+        const lead = updateLead(leadId, src.actor, cal, null, null);
+        addEvent(leadId, src.actor, "calendar", describeCalendar(lead), null, null, firstAt);
       }
       for (const i of ids) {
         setMsg.run(leadId, "done", i, byId.get(i)!.chat_jid);
@@ -398,17 +398,17 @@ async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
       const fromMe = ids.every((i) => byId.get(i)!.from_me);
       updateLead(
         a.leadId,
-        fromMe ? OWNER : src.partner.split(" ")[0],
+        fromMe ? OWNER : src.actor,
         toPatch(a),
         isStatus(a.status) ? a.status : null,
         a.note ?? "הודעות חדשות בוואטסאפ",
       );
       if (cleanDateTime(a.meetingAt) || cleanDate(a.workStart)) {
-        addEvent(a.leadId, fromMe ? OWNER : src.partner.split(" ")[0], "calendar", describeCalendar(getLead(a.leadId)!));
+        addEvent(a.leadId, fromMe ? OWNER : src.actor, "calendar", describeCalendar(getLead(a.leadId)!));
       }
       if (a.clientPrice != null || a.subPrice != null || a.subName) {
         const lead = getLead(a.leadId)!;
-        addEvent(a.leadId, fromMe ? OWNER : src.partner.split(" ")[0], "deal", describeDeal(lead));
+        addEvent(a.leadId, fromMe ? OWNER : src.actor, "deal", describeDeal(lead));
       }
       d.prepare("UPDATE leads SET last_message_at = ? WHERE id = ?").run(lastAt(ids), a.leadId);
       for (const i of ids) {

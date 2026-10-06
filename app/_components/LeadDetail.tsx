@@ -35,7 +35,7 @@ export default function LeadDetail({
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const source = data.sources.find((s) => s.id === lead.source);
-  const partner = source?.partner.split(" ")[0] ?? "שותף";
+  const partner = source?.actor ?? "שותף";
   const place = [lead.address, lead.city].filter(Boolean).join(", ");
   const photos = lead.messages.filter((m) => m.mediaType === "image" && m.mediaUrl).map((m) => m.mediaUrl!);
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;

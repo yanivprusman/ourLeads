@@ -88,7 +88,7 @@ export function board(me: { id: string; name: string }) {
   return {
     me,
     statuses: STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s] })),
-    sources: SOURCES.map((s) => ({ id: s.id, label: s.label, partner: s.partner })),
+    sources: SOURCES.map((s) => ({ id: s.id, label: s.label, actor: s.actor })),
     /** Who the ball can be passed to. */
     people: users().map((u) => ({ id: u.id, name: u.name })),
     leads: leads.map((l) => leadView(l, byLead.get(l.id) ?? [], evByLead.get(l.id) ?? [])),

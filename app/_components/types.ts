@@ -79,7 +79,7 @@ export function margin(d: Deal): number | null {
 export interface BoardData {
   me: { id: string; name: string };
   statuses: { id: string; label: string }[];
-  sources: { id: string; label: string; partner: string }[];
+  sources: { id: string; label: string; actor: string }[];
   /** Who the ball can be passed to. */
   people: { id: string; name: string }[];
   leads: Lead[];

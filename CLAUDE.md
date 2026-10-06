@@ -3,8 +3,11 @@
 # ourLeads
 
 Shared lead board for the partnership with **Dudu (בסיס עבודות בגובה, 053-332-5272, basis-s.co.il)**
-and **Israel (סנפלינג ישראל, 052-540-7778, s-israel.co.il)**. The split Dudu set on 2026-10-05:
-building and facade work goes to Basis; pigeons and windows go to Israel.
+and the business **סנפלינג ישראל (052-540-7778, s-israel.co.il)**. The split Dudu set on 2026-10-05:
+building and facade work goes to Basis; pigeons and windows go to סנפלינג ישראל.
+
+**"ישראל" is part of a company name, not a person** — there is no partner called Israel. Never
+write "Israel said" / "ישראל אמר"; the source's `actor` in `lib/config.ts` is what events are signed with.
 
 ## How leads get in
 - `instrumentation.ts` starts `lib/ingest.ts`. Every 20 s it reads both private chats from the
