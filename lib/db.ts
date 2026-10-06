@@ -283,6 +283,16 @@ const PATCHABLE: (keyof LeadPatch)[] = [
 ];
 
 /** Apply field changes and a status change, logging each as an event. */
+const EDIT_LABELS = { title: "כותרת", trade: "עבודה", customer_name: "לקוח", address: "כתובת", city: "עיר", next_step: "הצעד הבא" } as const;
+
+/** A corrected field leaves a line in the history: "עבודה: חיזוק אריחים ← איטום פסיפס". */
+export function logFieldEdits(before: LeadRow, after: LeadRow, who: string): void {
+  for (const [key, label] of Object.entries(EDIT_LABELS) as [keyof typeof EDIT_LABELS, string][]) {
+    if (before[key] === after[key]) continue;
+    addEvent(after.id, who, "note", `${label}: ${before[key] ?? "—"} ← ${after[key] ?? "—"}`);
+  }
+}
+
 export function updateLead(
   id: number,
   who: string,

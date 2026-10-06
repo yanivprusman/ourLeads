@@ -205,8 +205,9 @@ export default function LeadDetail({
           <div className="bg-white rounded-2xl border border-line divide-y divide-line">
             {lead.nextStep && <Fact k="הצעד הבא" v={lead.nextStep} strong />}
             {lead.visitAt && !lead.meetingAt && <Fact k="ביקור" v={lead.visitAt} />}
-            {lead.trade && <Fact k="עבודה" v={lead.trade} />}
-            {lead.customerName && <Fact k="לקוח" v={lead.customerName} />}
+            <EditFact id="lead-title" k="כותרת" v={lead.title} busy={busy} onSave={(v) => (v ? patch({ title: v }) : Promise.resolve(false))} />
+            <EditFact id="lead-trade" k="עבודה" v={lead.trade} busy={busy} onSave={(v) => patch({ trade: v })} />
+            <EditFact id="lead-customer" k="לקוח" v={lead.customerName} busy={busy} onSave={(v) => patch({ customerName: v })} />
             {place && <Fact k="כתובת" v={place} />}
             {lead.details && <p className="p-4 leading-relaxed text-[15px] text-ink-2">{lead.details}</p>}
           </div>
@@ -294,6 +295,55 @@ function Action({
       {icon}
       {label}
     </a>
+  );
+}
+
+/** A detail row that turns into a text box when tapped — the way to correct what the extractor got wrong. */
+function EditFact({ id, k, v, busy, onSave }: { id: string; k: string; v: string | null; busy: boolean; onSave: (v: string | null) => Promise<boolean> }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const save = async () => {
+    if (draft === null) return;
+    const next = draft.trim() || null;
+    if (next === v || (await onSave(next))) setDraft(null);
+  };
+  if (draft === null)
+    return (
+      <button
+        data-id={`${id}-edit`}
+        onClick={() => setDraft(v ?? "")}
+        className="w-full flex gap-3 px-4 py-3 text-sm text-start hover:bg-paper cursor-pointer transition group"
+      >
+        <span className="text-muted w-20 shrink-0">{k}</span>
+        <span className={`min-w-0 flex-1 ${v ? "text-ink-2" : "text-muted"}`}>{v ?? "—"}</span>
+        <span className="text-muted/60 group-hover:text-harbour-2 text-xs self-center">שנה</span>
+      </button>
+    );
+  return (
+    <div className="flex gap-2 px-4 py-2.5 text-sm items-center">
+      <span className="text-muted w-20 shrink-0">{k}</span>
+      <input
+        data-id={`${id}-input`}
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") setDraft(null);
+        }}
+        className="flex-1 min-w-0 rounded-lg border border-line px-3 py-2 bg-white outline-none focus:border-harbour-2 focus:ring-4 focus:ring-harbour-2/10"
+      />
+      <button
+        data-id={`${id}-save`}
+        disabled={busy}
+        onClick={save}
+        className="rounded-lg px-3 py-2 bg-harbour text-white font-semibold hover:bg-harbour-2 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        שמור
+      </button>
+      <button data-id={`${id}-cancel`} onClick={() => setDraft(null)} className="rounded-lg px-2 py-2 text-muted hover:text-ink cursor-pointer transition">
+        ביטול
+      </button>
+    </div>
   );
 }
 

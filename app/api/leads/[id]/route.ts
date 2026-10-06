@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { asUser } from "@/lib/http";
-import { addEvent, isStatus, updateLead, type LeadPatch } from "@/lib/db";
+import { addEvent, getLead, isStatus, logFieldEdits, updateLead, type LeadPatch } from "@/lib/db";
 import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal } from "@/lib/deal";
 
 export const runtime = "nodejs";
@@ -16,6 +16,7 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     const patch: LeadPatch = {};
     const str = (k: string) => (body[k] === null ? null : String(body[k]).trim() || null);
     if (typeof body.title === "string" && body.title.trim()) patch.title = body.title.trim();
+    if ("trade" in body) patch.trade = str("trade");
     if ("customerName" in body) patch.customer_name = str("customerName");
     if ("address" in body) patch.address = str("address");
     if ("city" in body) patch.city = str("city");
@@ -39,9 +40,12 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     if ("workStart" in body) patch.work_start = cleanDate(body.workStart);
     if ("workEnd" in body) patch.work_end = cleanDate(body.workEnd) ?? (patch.work_start ?? null);
     const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
+    const before = getLead(id);
+    if (!before) return NextResponse.json({ error: "lead not found" }, { status: 404 });
     const lead = updateLead(id, user.name, patch, isStatus(body.status) ? body.status : null, note);
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(id, user.name, "deal", describeDeal(lead));
     if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(id, user.name, "calendar", describeCalendar(lead));
+    logFieldEdits(before, lead, user.name);
     return NextResponse.json({ ok: true, id: lead.id });
   });
 }

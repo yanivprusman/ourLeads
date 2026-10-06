@@ -624,19 +624,40 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                         val facts = listOfNotNull(
                             l.nextStep?.let { Triple("הצעד הבא", it, true) },
                             l.visitAt?.takeIf { l.meetingAt == null }?.let { Triple("ביקור", it, false) },
-                            l.trade?.let { Triple("עבודה", it, false) },
-                            l.customerName?.let { Triple("לקוח", it, false) },
-                            place.ifEmpty { null }?.let { Triple("כתובת", it, false) },
                         )
-                        facts.forEachIndexed { i, (k, v, strong) ->
-                            if (i > 0) HorizontalDivider(color = Line)
+                        facts.forEach { (k, v, strong) ->
                             Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                                 T(k, 14, color = Muted, modifier = Modifier.width(84.dp))
                                 T(v, 14, if (strong) FontWeight.SemiBold else FontWeight.Normal, if (strong) Ink else Ink2)
                             }
+                            HorizontalDivider(color = Line)
+                        }
+                        // Tap to correct what the extractor got wrong ("חיזוק אריחים" that is really "איטום פסיפס").
+                        fun save(key: String, v: String?) {
+                            if (busy) return
+                            busy = true
+                            scope.launch {
+                                when (val r = api.setSchedule(l.id, mapOf(key to v))) {
+                                    is Result.Ok -> { error = null; onChanged() }
+                                    is Result.Err -> error = r.message
+                                }
+                                busy = false
+                            }
+                        }
+                        EditFact("כותרת", l.title, busy) { v -> if (v != null) save("title", v) }
+                        HorizontalDivider(color = Line)
+                        EditFact("עבודה", l.trade, busy) { save("trade", it) }
+                        HorizontalDivider(color = Line)
+                        EditFact("לקוח", l.customerName, busy) { save("customerName", it) }
+                        place.ifEmpty { null }?.let {
+                            HorizontalDivider(color = Line)
+                            Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                T("כתובת", 14, color = Muted, modifier = Modifier.width(84.dp))
+                                T(it, 14, color = Ink2)
+                            }
                         }
                         l.details?.let {
-                            if (facts.isNotEmpty()) HorizontalDivider(color = Line)
+                            HorizontalDivider(color = Line)
                             T(it, 15, color = Ink2, lineHeight = 23, modifier = Modifier.padding(16.dp))
                         }
                     }
@@ -969,6 +990,43 @@ private fun DealForm(deal: Deal, busy: Boolean, onCancel: () -> Unit, onSave: (D
                 "ביטול", 15, color = Muted,
                 modifier = Modifier.clip(RoundedCornerShape(14.dp)).border(1.dp, Line, RoundedCornerShape(14.dp))
                     .clickable(onClick = onCancel).padding(horizontal = 20.dp, vertical = 14.dp),
+            )
+        }
+    }
+}
+
+/** A detail row that becomes a text box when tapped. Saving an empty box clears the field. */
+@Composable
+private fun EditFact(k: String, v: String?, busy: Boolean, onSave: (String?) -> Unit) {
+    var draft by remember(v) { mutableStateOf<String?>(null) }
+    val d = draft
+    if (d == null) {
+        Row(
+            Modifier.fillMaxWidth().clickable { draft = v ?: "" }.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            T(k, 14, color = Muted, modifier = Modifier.width(84.dp))
+            T(v ?: "—", 14, color = if (v == null) Muted else Ink2, modifier = Modifier.weight(1f))
+            T("שנה", 12, color = Muted)
+        }
+        return
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        T(k, 13, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+        Field(d, { draft = it }, k)
+        Row(Modifier.padding(top = 8.dp)) {
+            val next = d.trim().ifEmpty { null }
+            T(
+                "שמור", 15, FontWeight.SemiBold, Color.White,
+                Modifier.clip(RoundedCornerShape(12.dp)).background(if (busy) Harbour.copy(alpha = .35f) else Harbour)
+                    .clickable(enabled = !busy) { if (next != v) onSave(next) else draft = null }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            T(
+                "ביטול", 15, color = Ink2,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).border(1.dp, Line, RoundedCornerShape(12.dp))
+                    .clickable { draft = null }.padding(horizontal = 16.dp, vertical = 10.dp),
             )
         }
     }

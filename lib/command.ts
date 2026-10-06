@@ -2,7 +2,7 @@ import "server-only";
 import { askJson } from "./claude";
 import { SOURCES } from "./config";
 import { STATUS_GUIDE, describeLeads } from "./ingest";
-import { STATUS_LABELS, addEvent, getDb, getLead, isStatus, now, updateLead } from "./db";
+import { STATUS_LABELS, addEvent, getDb, getLead, isStatus, logFieldEdits, now, updateLead } from "./db";
 import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal, todayLine } from "./deal";
 
 /**
@@ -34,6 +34,11 @@ interface Answer {
     leadId: number;
     status?: string | null;
     note?: string | null;
+    title?: string | null;
+    trade?: string | null;
+    address?: string | null;
+    city?: string | null;
+    details?: string | null;
     nextStep?: string | null;
     visitAt?: string | null;
     phones?: string[];
@@ -74,6 +79,11 @@ const COMMAND_SCHEMA = {
           leadId: { type: "integer" },
           status: s,
           note: s,
+          title: s,
+          trade: s,
+          address: s,
+          city: s,
+          details: s,
           nextStep: s,
           visitAt: s,
           customerName: s,
@@ -138,6 +148,10 @@ status הוא אחד משלושה מצבים, ועוד יציאה: none (עוד 
 "סגרנו עם יונתן 050-1234567 על 5000 פלוס מע"מ" כשיונתן הוא מי שמבצע → subName "יונתן", subPhone "0501234567", subPrice 5000, subVat true.
 אם לא ברור אם האדם הוא הלקוח או קבלן המשנה — שאל ב-reply ואל תנחש.
 סגירה עם הלקוח → status work.
+תיקון פרטי הליד עצמו — כשנאמר שהעבודה, הכותרת, הכתובת או העיר אחרות ממה שרשום — משנים את השדה, לא רק רושמים הערה:
+"זה לא חיזוק אריחים, זה איטום פסיפס" / "תשנה את העבודה לאיטום פסיפס" → trade "איטום פסיפס", ו-title חדש שבו סוג העבודה הוחלף והשאר נשמר (למשל "חיזוק אריחים בחזית – באר שבע" → "איטום פסיפס בחזית – באר שבע").
+"הכתובת היא הרצל 5" → address. "זה בדימונה, לא בבאר שבע" → city, ו-title מתוקן אם העיר מופיעה בו.
+details: רק כשנאמר תיאור חדש של העבודה שמחליף את הקיים.
 יומן (${todayLine()}):
 - meetingAt: פגישה/ביקור אצל לקוח שעוד אין איתו חוזה, "YYYY-MM-DDTHH:MM" שעון ישראל. "חמישי בעשר" = יום חמישי הקרוב 10:00.
 - workStart/workEnd: ימי ביצוע העבודה כשיש חוזה, "YYYY-MM-DD". יום אחד → workEnd = workStart.
@@ -178,6 +192,11 @@ export async function runCommand(said: string, who: string, leadId: number | nul
     if (!before) continue;
     const patch: Record<string, unknown> = {};
     if (c.nextStep !== undefined && c.nextStep !== null) patch.next_step = c.nextStep;
+    if (c.title?.trim()) patch.title = c.title.trim();
+    if (c.trade?.trim()) patch.trade = c.trade.trim();
+    if (c.address?.trim()) patch.address = c.address.trim();
+    if (c.city?.trim()) patch.city = c.city.trim();
+    if (c.details?.trim()) patch.details = c.details.trim();
     if (c.visitAt !== undefined && c.visitAt !== null) patch.visit_at = c.visitAt;
     if (c.phones?.length) patch.phones = Array.from(new Set([...JSON.parse(before.phones), ...c.phones]));
     if (c.customerName) patch.customer_name = c.customerName;
@@ -198,6 +217,7 @@ export async function runCommand(said: string, who: string, leadId: number | nul
     const after = updateLead(c.leadId, who, patch, status, c.note ?? text);
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "deal", describeDeal(after));
     if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "calendar", describeCalendar(after));
+    logFieldEdits(before, after, who);
     applied.push({
       leadId: after.id,
       title: after.title,
