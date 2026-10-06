@@ -68,6 +68,7 @@ import com.automatelinux.ourLeads.data.*
 import com.automatelinux.ourLeads.platform.PlatformBackHandler
 import com.automatelinux.ourLeads.platform.decodeImage
 import com.automatelinux.ourLeads.platform.VoiceRecorder
+import com.automatelinux.ourLeads.platform.rememberContactSync
 import com.automatelinux.ourLeads.platform.rememberVoiceRecorder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -222,10 +223,11 @@ private fun BoardScreen() {
     var talkError by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
+    val contacts = rememberContactSync()
 
     suspend fun load() {
         when (val r = api.board()) {
-            is Result.Ok -> { data = r.value; error = null }
+            is Result.Ok -> { data = r.value; error = null; contacts.sync(r.value.leads, r.value.sources) }
             is Result.Err -> error = r.message
         }
     }
@@ -251,6 +253,10 @@ private fun BoardScreen() {
                 enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut(),
             ) {
                 reply?.let { ReplyBubble(it, { reply = null }, Modifier.navigationBarsPadding().padding(start = 14.dp, end = 14.dp, bottom = LocalDockBottom.current)) }
+            }
+            contacts.problem?.let {
+                T(it, 13, FontWeight.SemiBold, Ink, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 6.dp)
+                    .clip(CircleShape).background(Color(0xFFFFF4DC)).clickable { contacts.setUp() }.padding(horizontal = 14.dp, vertical = 6.dp))
             }
             talkError?.let {
                 T(it, 14, FontWeight.SemiBold, Danger, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
