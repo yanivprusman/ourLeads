@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -69,6 +70,7 @@ import com.automatelinux.ourLeads.platform.PlatformBackHandler
 import com.automatelinux.ourLeads.platform.decodeImage
 import com.automatelinux.ourLeads.platform.VoiceRecorder
 import com.automatelinux.ourLeads.platform.rememberContactSync
+import com.automatelinux.ourLeads.platform.rememberShareText
 import com.automatelinux.ourLeads.platform.rememberVoiceRecorder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -507,6 +509,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     var photo by remember { mutableStateOf<Int?>(null) } // index into photos, open in the viewer
     var said by remember(l.id) { mutableStateOf<CommandReply?>(null) }
     var talkError by remember(l.id) { mutableStateOf<String?>(null) }
+    var sharing by remember(l.id) { mutableStateOf(false) }
     val src = d.sources.firstOrNull { it.id == l.source }
     val partner = src?.actor ?: "שותף"
     val place = listOfNotNull(l.address, l.city).joinToString(", ")
@@ -530,6 +533,8 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     }
 
     val timeline = (l.messages.filter { it.mediaType != "image" }.map { Item.M(it) } + l.events.map { Item.E(it) }).sortedBy { it.at }
+
+    if (sharing) ShareDialog(l, onDismiss = { sharing = false }, onShared = onChanged)
 
     Box(Modifier.fillMaxSize().background(Paper)) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 48.dp)) {
@@ -564,6 +569,15 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                             .background(Color.Black.copy(alpha = .35f)).clickable(onClick = onBack),
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Default.Close, "סגירה", tint = Color.White) }
+                    Row(
+                        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 12.dp, end = 62.dp).height(42.dp).clip(CircleShape)
+                            .background(Color.Black.copy(alpha = .35f)).clickable { sharing = true }.padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Share, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        T("שתף", 14, FontWeight.SemiBold, Color.White)
+                    }
                 }
             }
             item {
@@ -757,6 +771,71 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
 }
 
 /** "אצלי" for the person holding the phone, "אצל דודו" for anyone else. */
+/**
+ * Send this lead's card as a link that opens the one lead with no sign-in. The card
+ * is full unless something is ticked off; the server keeps the choice with the link.
+ * The history is free text that names the phone, the street and the price, so
+ * hiding any of those hides it too.
+ */
+@Composable
+private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
+    val api = LocalApi.current
+    val share = rememberShareText()
+    val scope = rememberCoroutineScope()
+    val fields = listOf("contact" to "פרטי הלקוח", "address" to "כתובת", "price" to "מחיר", "photos" to "תמונות", "history" to "היסטוריה")
+    var hide by remember { mutableStateOf(setOf<String>()) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val forced = hide.any { it in setOf("contact", "address", "price") }
+    val effective = if (forced) hide + "history" else hide
+    val photoWarning = "contact" in effective && "photos" !in effective && l.messages.any { it.mediaType == "image" }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        title = { T("שליחת כרטיס", 18, FontWeight.Bold) },
+        text = {
+            Column {
+                T("קישור שפותח רק את הליד הזה, בלי כניסה. הכרטיס מלא — סמנו מה להוריד.", 14, color = Muted)
+                Spacer(Modifier.height(8.dp))
+                fields.forEach { (id, label) ->
+                    val locked = id == "history" && forced
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .clickable(enabled = !locked) { hide = if (id in hide) hide - id else hide + id }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(id in effective, onCheckedChange = null, enabled = !locked, colors = CheckboxDefaults.colors(checkedColor = Harbour))
+                        Spacer(Modifier.width(4.dp))
+                        T("בלי $label", 15)
+                        if (locked) T("  · יורדת יחד עם השאר", 12, color = Muted)
+                    }
+                }
+                if (photoWarning) T(
+                    "צילומי מסך מהשיחה עם הלקוח מראים לרוב את המספר שלו. כדי להסתיר אותו לגמרי — גם בלי תמונות.", 12, color = Color(0xFF8A4A0B),
+                    modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFFF1DF)).padding(10.dp),
+                )
+                error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 8.dp)) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                {
+                    busy = true
+                    scope.launch {
+                        when (val r = api.createShare(l.id, effective.toList())) {
+                            is Result.Ok -> { share(l.title, "${l.title}\n${r.value}"); onShared(); onDismiss() }
+                            is Result.Err -> error = r.message
+                        }
+                        busy = false
+                    }
+                },
+                enabled = !busy,
+            ) { Text("שתף", color = Harbour, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("ביטול", color = Muted) } },
+    )
+}
+
 private fun holderLabel(d: BoardData, id: String): String =
     if (id == d.me.id) "אצלי" else "אצל ${d.people.firstOrNull { it.id == id }?.name ?: id}"
 

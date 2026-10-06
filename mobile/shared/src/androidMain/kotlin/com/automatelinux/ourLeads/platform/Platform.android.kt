@@ -105,3 +105,18 @@ actual fun rememberVoiceRecorder(): VoiceRecorder {
 actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
     androidx.activity.compose.BackHandler(enabled, onBack)
 }
+
+@Composable
+actual fun rememberShareText(): (subject: String, text: String) -> Unit {
+    val context = LocalContext.current
+    return remember(context) {
+        { subject, text ->
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, subject)
+                putExtra(android.content.Intent.EXTRA_TEXT, text)
+            }
+            context.startActivity(android.content.Intent.createChooser(send, "שליחת הכרטיס").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+}

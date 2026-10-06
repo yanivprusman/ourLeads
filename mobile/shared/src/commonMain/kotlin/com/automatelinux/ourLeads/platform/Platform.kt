@@ -40,3 +40,7 @@ interface ContactSync {
 
 @Composable
 expect fun rememberContactSync(): ContactSync
+
+/** Hands text to the system share sheet — WhatsApp, email, anything the phone has. */
+@Composable
+expect fun rememberShareText(): (subject: String, text: String) -> Unit

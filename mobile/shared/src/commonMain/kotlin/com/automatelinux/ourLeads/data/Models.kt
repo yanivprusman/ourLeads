@@ -103,3 +103,6 @@ data class CommandReply(val said: String, val reply: String, val changes: List<C
 
 @Serializable
 data class ErrorBody(val error: String? = null)
+
+@Serializable
+data class ShareLink(val token: String, val url: String)

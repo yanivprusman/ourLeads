@@ -109,6 +109,19 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
             .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
     }
 
+    /**
+     * A link to this lead's card that opens with no sign-in, leaving out what [hide]
+     * names (contact, address, price, photos, history). Returns the URL to send.
+     */
+    suspend fun createShare(leadId: Int, hide: List<String>): Result<String> {
+        val body = JsonObject(mapOf("hide" to kotlinx.serialization.json.JsonArray(hide.map { JsonPrimitive(it) })))
+            .toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/leads/$leadId/shares", token, body, "application/json; charset=utf-8")
+        if (r.code != 200) return Result.Err(describe(r))
+        return runCatching { Result.Ok(json.decodeFromString(ShareLink.serializer(), r.text).url) }
+            .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
+    }
+
     /** Media URLs are signed by the server and need no token. */
     suspend fun media(path: String): ByteArray? {
         val r = httpRequest("GET", base + path, "", null, null)
