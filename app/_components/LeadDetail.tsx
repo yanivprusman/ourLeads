@@ -248,14 +248,14 @@ export default function LeadDetail({
       {photo && (
         <button
           data-id="photo-close"
-          className="fixed inset-0 z-50 bg-black/90 grid place-items-center cursor-zoom-out"
+          className="fixed inset-0 z-50 bg-black/90 cursor-zoom-out"
           onClick={(e) => {
             e.stopPropagation();
             setPhoto(null);
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={photo} alt="" className="max-h-full max-w-full object-contain" />
+          <img src={photo} alt="" className="h-full w-full object-contain" />
         </button>
       )}
     </div>
