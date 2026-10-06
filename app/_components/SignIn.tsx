@@ -2,9 +2,12 @@
 import { useState } from "react";
 import Mark from "./Mark";
 
-export default function SignIn({ linkExpired }: { linkExpired: boolean }) {
+export default function SignIn({ linkExpired = false, linkUsed = false }: { linkExpired?: boolean; linkUsed?: boolean }) {
   const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(linkExpired ? "הקישור פג תוקף. בקשו קישור חדש או הזינו קוד גישה." : null);
+  const [error, setError] = useState<string | null>(
+    linkUsed ? "הקישור הזה כבר שימש לכניסה — כל קישור עובד פעם אחת. בקשו קישור חדש או הזינו קוד גישה."
+    : linkExpired ? "הקישור פג תוקף. בקשו קישור חדש או הזינו קוד גישה." : null,
+  );
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {

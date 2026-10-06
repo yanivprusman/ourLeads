@@ -3,11 +3,15 @@
  * Print a link that signs a browser in to ourLeads as one partner.
  *
  *   node scripts/make-link.mjs yaniv                        # 10 minutes, this machine's dev port
- *   node scripts/make-link.mjs dudu 1440 https://ourleads.prod.ya-niv.com
+ *   node scripts/make-link.mjs dudu 1440 https://our-leads.prod.ya-niv.com
  *
  * The link carries a signature over the partner id and its own expiry — not
  * the partner's token — so it is safe to send over WhatsApp, and worthless once
  * the minutes are up. The browser that opens it keeps a session for a year.
+ *
+ * It also works only ONCE: the first tap of "כניסה" uses it up, so a forwarded
+ * or leaked copy is dead (app/api/session/link/route.ts). Make a new one per
+ * device.
  */
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";

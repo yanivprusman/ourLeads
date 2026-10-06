@@ -119,6 +119,15 @@ export function getDb(): DatabaseSync {
       changes TEXT NOT NULL DEFAULT '[]',
       error TEXT
     );
+    -- Sign-in links that have been used. A link is a key: the first browser to use
+    -- it gets the session, and every later use is refused, so a forwarded or leaked
+    -- link is already dead. Shared by dev and prod (one data dir).
+    CREATE TABLE IF NOT EXISTS used_links (
+      sig TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      exp INTEGER NOT NULL,
+      used_at TEXT NOT NULL
+    );
   `);
   // The deal: what the client pays, and what the subcontractor who does it gets.
   // Added after the first leads existed, so it is a migration, not part of CREATE.
@@ -148,6 +157,18 @@ export function getDb(): DatabaseSync {
     WHERE status IN ('new', 'contacted', 'visit_scheduled', 'quoted', 'won', 'done', 'on_hold', 'lost');
   `);
   return db;
+}
+
+/** True for the first caller with this link, false for every one after — atomic. */
+export function claimLink(sig: string, userId: string, exp: number): boolean {
+  const r = getDb()
+    .prepare("INSERT OR IGNORE INTO used_links (sig, user_id, exp, used_at) VALUES (?, ?, ?, ?)")
+    .run(sig, userId, exp, now());
+  return Number(r.changes) === 1;
+}
+
+export function linkUsed(sig: string): boolean {
+  return !!getDb().prepare("SELECT 1 FROM used_links WHERE sig = ?").get(sig);
 }
 
 export function now(): string {

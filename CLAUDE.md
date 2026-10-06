@@ -29,7 +29,9 @@ note. Each change is logged in `events` with who said it.
 ## Auth
 `OURLEADS_USERS` in `.env.local` holds one token per partner. The phone sends it as a bearer
 token, baked in from `mobile/.env`. A browser signs in with the access code, or with a link from
-`node scripts/make-link.mjs <user> [minutes] [origin]`, and then holds an HMAC cookie. Media is
+`node scripts/make-link.mjs <user> [minutes] [origin]` — single-use: opening it shows a button,
+and the tap uses it up (a GET must not, or WhatsApp's link preview would burn it) — and then
+holds an HMAC cookie. Media is
 served by signed URL (`/api/media/<file>?sig=`).
 
 The dev host sits behind the dev-auth wall, and Dudu must NOT be granted access to it: a grant
