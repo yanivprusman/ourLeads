@@ -502,7 +502,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     var said by remember(l.id) { mutableStateOf<CommandReply?>(null) }
     var talkError by remember(l.id) { mutableStateOf<String?>(null) }
     val src = d.sources.firstOrNull { it.id == l.source }
-    val partner = src?.partner?.substringBefore(" ") ?: "שותף"
+    val partner = src?.actor ?: "שותף"
     val place = listOfNotNull(l.address, l.city).joinToString(", ")
     val photos = l.messages.filter { it.mediaType == "image" && it.mediaUrl != null }.map { it.mediaUrl!! }
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }

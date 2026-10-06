@@ -74,7 +74,7 @@ data class Me(val id: String, val name: String)
 data class StatusDef(val id: String, val label: String)
 
 @Serializable
-data class SourceDef(val id: String, val label: String, val partner: String)
+data class SourceDef(val id: String, val label: String, val actor: String)
 
 @Serializable
 data class BoardData(
