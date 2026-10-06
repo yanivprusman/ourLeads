@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import java.io.File
+import kotlinx.coroutines.launch
 
 actual fun decodeImage(bytes: ByteArray, full: Boolean): ImageBitmap? {
     // Thumbnails and the detail view never need the camera's full resolution;
@@ -119,4 +120,49 @@ actual fun rememberShareText(): (subject: String, text: String) -> Unit {
             context.startActivity(android.content.Intent.createChooser(send, "שליחת הכרטיס").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
+}
+
+/** Longest side of a sent photo: enough to read a WhatsApp screenshot or see a crack, far less than the camera's 4000+. */
+private const val PHOTO_MAX_SIDE = 2048
+
+@Composable
+actual fun rememberPhotoPicker(onPicked: (List<ByteArray>) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(30)) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            val photos = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                uris.mapNotNull { uri -> scaledJpeg(context, uri) }
+            }
+            onPicked(photos)
+        }
+    }
+    return remember(launcher) {
+        { launcher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    }
+}
+
+private fun scaledJpeg(context: Context, uri: android.net.Uri): ByteArray? {
+    val resolver = context.contentResolver
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= PHOTO_MAX_SIDE) sample *= 2
+    val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return null
+    // The camera stores rotation as an EXIF tag; a re-encoded JPEG drops it, so apply it to the pixels.
+    val degrees = resolver.openInputStream(uri)?.use {
+        when (androidx.exifinterface.media.ExifInterface(it).getAttributeInt(androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION, 1)) {
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+    } ?: 0f
+    val scale = minOf(1f, PHOTO_MAX_SIDE.toFloat() / maxOf(decoded.width, decoded.height))
+    val m = android.graphics.Matrix().apply { postScale(scale, scale); postRotate(degrees) }
+    val bmp = android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true)
+    val out = java.io.ByteArrayOutputStream()
+    bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+    return out.toByteArray()
 }

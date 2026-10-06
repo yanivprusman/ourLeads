@@ -122,6 +122,19 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
             .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
     }
 
+    /** Add photos straight to a lead (JPEG bytes each). */
+    suspend fun addPhotos(leadId: Int, photos: List<ByteArray>): Result<Unit> {
+        val boundary = "----ourleadsphotos${photos.sumOf { it.size }}x${photos.size}"
+        var body = ByteArray(0)
+        photos.forEachIndexed { i, p ->
+            body += ("--$boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"photo$i.jpg\"\r\n" +
+                "Content-Type: image/jpeg\r\n\r\n").encodeToByteArray() + p + "\r\n".encodeToByteArray()
+        }
+        body += "--$boundary--\r\n".encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/leads/$leadId/photos", token, body, "multipart/form-data; boundary=$boundary")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     /** Media URLs are signed by the server and need no token. */
     suspend fun media(path: String): ByteArray? {
         val r = httpRequest("GET", base + path, "", null, null)

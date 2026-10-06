@@ -44,3 +44,10 @@ expect fun rememberContactSync(): ContactSync
 /** Hands text to the system share sheet — WhatsApp, email, anything the phone has. */
 @Composable
 expect fun rememberShareText(): (subject: String, text: String) -> Unit
+
+/**
+ * Pick photos from the gallery. Returns the launcher; [onPicked] gets each photo as
+ * JPEG bytes, already scaled down to a size worth sending over the VPN.
+ */
+@Composable
+expect fun rememberPhotoPicker(onPicked: (List<ByteArray>) -> Unit): () -> Unit

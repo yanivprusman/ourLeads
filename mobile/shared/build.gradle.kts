@@ -33,6 +33,8 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.activity.compose)
+            // EXIF rotation of a picked photo (a re-encoded JPEG would lose the tag).
+            implementation("androidx.exifinterface:exifinterface:1.3.7")
         }
     }
 }

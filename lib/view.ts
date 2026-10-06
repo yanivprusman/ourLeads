@@ -69,10 +69,11 @@ export function board(me: { id: string; name: string }) {
     // Fixed order, oldest first: by when the lead came in — its first message, or
     // created_at for a lead born from a voice command (it has no messages). Later
     // messages never move it, so the list reads the same every time it is opened;
-    // id breaks the ties the first import left (many leads share one second).
+    // id breaks the ties the first import left (many leads share one second). Photos added
+    // later by hand (chat 'upload') are not when the lead came in.
     .prepare(
       `SELECT * FROM leads ORDER BY
-         COALESCE((SELECT MIN(sent_at) FROM messages WHERE lead_id = leads.id), created_at) ASC, id ASC`,
+         COALESCE((SELECT MIN(sent_at) FROM messages WHERE lead_id = leads.id AND chat_jid != 'upload'), created_at) ASC, id ASC`,
     )
     .all() as unknown as LeadRow[];
   const msgs = d.prepare("SELECT * FROM messages ORDER BY sent_at ASC").all() as unknown as MessageRow[];

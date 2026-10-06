@@ -36,6 +36,7 @@ export default function LeadDetail({
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const source = data.sources.find((s) => s.id === lead.source);
   const partner = source?.actor ?? "שותף";
   const place = [lead.address, lead.city].filter(Boolean).join(", ");
@@ -64,6 +65,19 @@ export default function LeadDetail({
     if ("note" in body) setNote("");
     onChanged();
     return true;
+  }
+  // Photos from a site visit go straight onto the lead — never through the WhatsApp chat,
+  // where the extractor would read them as a new lead.
+  async function addPhotos(files: FileList | null) {
+    if (!files?.length) return;
+    setUploading(true);
+    setError(null);
+    const form = new FormData();
+    for (const f of Array.from(files)) form.append("photo", f);
+    const res = await fetch(`/api/leads/${lead.id}/photos`, { method: "POST", body: form });
+    setUploading(false);
+    if (!res.ok) return setError((await res.json()).error ?? `HTTP ${res.status}`);
+    onChanged();
   }
   const setStatus = (s: string) => s !== lead.status && !busy && patch({ status: s, note: note.trim() || undefined });
 
@@ -125,6 +139,24 @@ export default function LeadDetail({
             <ShareIcon />
             שתף
           </button>
+          <label
+            data-id="lead-add-photos"
+            className={`absolute top-3 end-[8.5rem] h-10 px-4 rounded-full bg-black/35 hover:bg-black/55 backdrop-blur flex items-center gap-1.5 text-sm font-semibold transition ${uploading ? "cursor-wait opacity-60" : "cursor-pointer"}`}
+            title="הוספת תמונות מהביקור — ישר לליד, בלי וואטסאפ"
+          >
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              disabled={uploading}
+              className="hidden"
+              onChange={(e) => {
+                void addPhotos(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            {uploading ? "מעלה…" : "+ תמונות"}
+          </label>
         </div>
 
         <section className="px-4 -mt-0 pt-4 space-y-4">

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -71,6 +72,7 @@ import com.automatelinux.ourLeads.platform.decodeImage
 import com.automatelinux.ourLeads.platform.VoiceRecorder
 import com.automatelinux.ourLeads.platform.rememberContactSync
 import com.automatelinux.ourLeads.platform.rememberShareText
+import com.automatelinux.ourLeads.platform.rememberPhotoPicker
 import com.automatelinux.ourLeads.platform.rememberVoiceRecorder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -510,6 +512,20 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     var said by remember(l.id) { mutableStateOf<CommandReply?>(null) }
     var talkError by remember(l.id) { mutableStateOf<String?>(null) }
     var sharing by remember(l.id) { mutableStateOf(false) }
+    var uploading by remember(l.id) { mutableStateOf(false) }
+    // Photos from a site visit go straight onto the lead — never through the WhatsApp
+    // chat, where the extractor would read them as a new lead.
+    val pickPhotos = rememberPhotoPicker { picked ->
+        if (picked.isEmpty()) return@rememberPhotoPicker
+        uploading = true
+        scope.launch {
+            when (val r = api.addPhotos(l.id, picked)) {
+                is Result.Ok -> { error = null; onChanged() }
+                is Result.Err -> error = r.message
+            }
+            uploading = false
+        }
+    }
     val src = d.sources.firstOrNull { it.id == l.source }
     val partner = src?.actor ?: "שותף"
     val place = listOfNotNull(l.address, l.city).joinToString(", ")
@@ -569,14 +585,25 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                             .background(Color.Black.copy(alpha = .35f)).clickable(onClick = onBack),
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Default.Close, "סגירה", tint = Color.White) }
-                    Row(
-                        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 12.dp, end = 62.dp).height(42.dp).clip(CircleShape)
-                            .background(Color.Black.copy(alpha = .35f)).clickable { sharing = true }.padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Default.Share, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        T("שתף", 14, FontWeight.SemiBold, Color.White)
+                    Row(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 12.dp, end = 62.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            Modifier.height(42.dp).clip(CircleShape).background(Color.Black.copy(alpha = .35f))
+                                .clickable { sharing = true }.padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.Share, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            T("שתף", 14, FontWeight.SemiBold, Color.White)
+                        }
+                        Row(
+                            Modifier.height(42.dp).clip(CircleShape).background(Color.Black.copy(alpha = if (uploading) .2f else .35f))
+                                .clickable(enabled = !uploading) { pickPhotos() }.padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.AddAPhoto, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            T(if (uploading) "מעלה…" else "תמונות", 14, FontWeight.SemiBold, Color.White)
+                        }
                     }
                 }
             }
