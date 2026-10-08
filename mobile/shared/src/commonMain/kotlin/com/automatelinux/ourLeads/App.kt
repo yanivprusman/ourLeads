@@ -977,12 +977,6 @@ private fun ReportDialog(onDismiss: () -> Unit) {
         title = { T("דוח כל הלידים", 18, FontWeight.Bold) },
         text = {
             Column {
-                T(
-                    "כל הלידים הפתוחים, לפי אצל מי הכדור. שלחו קודם לקבוצה ריקה ובדקו שם, ואז לדודו." +
-                        (parts?.takeIf { it.size > 1 }?.let { " נשלח כ-${it.size} הודעות." } ?: ""),
-                    13, color = Muted,
-                )
-                Spacer(Modifier.height(8.dp))
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                     if (parts == null && error == null) T("טוען…", 13, color = Muted)
                     parts?.forEach { p ->

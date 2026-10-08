@@ -50,10 +50,6 @@ export default function ReportSheet({ onClose, onChanged }: { onClose: () => voi
             ×
           </button>
         </div>
-        <p className="text-sm text-muted">
-          כל הלידים הפתוחים, לפי אצל מי הכדור. שלחו קודם לקבוצה ריקה ובדקו שם, ואז לדודו.
-          {parts && parts.length > 1 && ` נשלח כ-${parts.length} הודעות.`}
-        </p>
 
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
           {!parts && !error && <p className="text-sm text-muted">טוען…</p>}
