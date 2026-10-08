@@ -189,6 +189,8 @@ export default function LeadDetail({
               external
             />
           </div>
+          {/* Talk about this lead — first thing under the actions, not below the fold. */}
+          <LeadVoice leadId={lead.id} onChanged={onChanged} />
           {lead.phones.length > 1 && (
             <div className="flex flex-wrap gap-2 text-sm">
               {lead.phones.slice(1).map((p) => (
@@ -327,8 +329,6 @@ export default function LeadDetail({
             {place && <Fact k="כתובת" v={place} />}
             {lead.details && <p className="p-4 leading-relaxed text-[15px] text-ink-2">{lead.details}</p>}
           </div>
-
-          <LeadVoice leadId={lead.id} onChanged={onChanged} />
 
           <div className="flex gap-2">
             <input
