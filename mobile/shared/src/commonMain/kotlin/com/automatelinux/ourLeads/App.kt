@@ -313,7 +313,7 @@ private fun LeadList(
                 }
                 Spacer(Modifier.weight(1f))
                 T(
-                    "דוח לדודו", 13, FontWeight.SemiBold, Color.White,
+                    "דוח", 13, FontWeight.SemiBold, Color.White,
                     Modifier.clip(CircleShape).background(Color.White.copy(alpha = .12f)).clickable { reporting = true }.padding(horizontal = 12.dp, vertical = 7.dp),
                 )
                 if (d.pending > 0) Spacer(Modifier.width(8.dp))

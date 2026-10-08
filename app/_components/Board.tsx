@@ -110,7 +110,7 @@ export default function Board() {
                 onClick={() => setReporting(true)}
                 className="text-sm font-semibold bg-white/10 hover:bg-white/20 active:bg-white/30 rounded-full px-3 py-1.5 cursor-pointer transition"
               >
-                דוח לדודו
+                דוח
               </button>
             </div>
           </div>
