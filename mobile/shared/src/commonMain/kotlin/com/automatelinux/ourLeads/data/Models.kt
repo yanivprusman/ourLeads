@@ -20,12 +20,15 @@ data class Msg(
 
 @Serializable
 data class LeadEvent(
+    val id: Int = 0,
     val at: String,
     val who: String,
     val kind: String,
     val text: String? = null,
     val from: String? = null,
     val to: String? = null,
+    /** Who last corrected this line by hand, or null. */
+    val editedBy: String? = null,
 )
 
 @Serializable
@@ -120,6 +123,9 @@ data class SentBatch(val batch: String, val kind: String, val to: String, val me
 
 @Serializable
 data class SentList(val sends: List<SentBatch>)
+
+@Serializable
+data class ClearResult(val deleted: Int, val failed: List<String> = emptyList())
 
 @Serializable
 data class ReportText(val parts: List<String>, val leadIds: List<Int> = emptyList())

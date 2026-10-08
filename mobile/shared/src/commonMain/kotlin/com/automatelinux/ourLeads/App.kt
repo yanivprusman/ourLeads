@@ -805,7 +805,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
             items(timeline) { it ->
                 when (it) {
                     is Item.M -> TimelineMessage(it.m, partner)
-                    is Item.E -> TimelineEvent(it.e)
+                    is Item.E -> TimelineEvent(it.e, onChanged)
                 }
             }
         }
@@ -887,6 +887,7 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
                     }
                 }
                 RecentSends(l.id, sentVersion, onChanged = onShared)
+                ClearPreview { sentVersion++; onShared() }
                 error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
@@ -994,6 +995,7 @@ private fun ReportDialog(onDismiss: () -> Unit) {
                     }
                 }
                 RecentSends(null, version)
+                ClearPreview { version++ }
             }
         },
         confirmButton = { TextButton(onDismiss) { Text("סגירה", color = Muted) } },
@@ -1049,6 +1051,46 @@ private fun RecentSends(leadId: Int?, refreshKey: Int, onChanged: () -> Unit = {
             }
         }
         error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 6.dp)) }
+    }
+}
+
+/** Delete for everyone every message the app put in קבוצה ריקה. Two taps. */
+@Composable
+private fun ClearPreview(onDone: () -> Unit = {}) {
+    val api = LocalApi.current
+    val scope = rememberCoroutineScope()
+    var armed by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(armed) { if (armed) { delay(4000); armed = false } }
+    Column(Modifier.padding(top = 12.dp)) {
+        OutlinedButton(
+            {
+                if (!armed) { armed = true; result = null; return@OutlinedButton }
+                armed = false
+                busy = true
+                scope.launch {
+                    result = when (val r = api.clearPreview()) {
+                        is Result.Ok -> with(r.value) {
+                            if (deleted == 0 && failed.isEmpty()) "אין הודעות של האפליקציה בקבוצה"
+                            else "נמחקו $deleted הודעות" + if (failed.isNotEmpty()) " · ${failed.size} לא נמחקו (ישנות מדי)" else ""
+                        }
+                        is Result.Err -> r.message
+                    }
+                    busy = false
+                    onDone()
+                }
+            },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = if (armed) Danger else Color.Transparent),
+        ) {
+            Text(
+                when { busy -> "מוחק…"; armed -> "לחצו שוב — למחוק הכל"; else -> "מחק את כל ההודעות מקבוצה ריקה" },
+                color = if (armed) Color.White else Danger, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+            )
+        }
+        result?.let { T(it, 12, color = Muted, modifier = Modifier.padding(top = 4.dp)) }
     }
 }
 
@@ -1165,12 +1207,16 @@ private fun TimelineMessage(m: Msg, partner: String) {
     }
 }
 
+/** One history line. Long-press opens [EventDialog] to correct it or take it off. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TimelineEvent(e: LeadEvent) {
-    Row(Modifier.padding(start = 6.dp, end = 16.dp).height(IntrinsicSize.Min)) {
+private fun TimelineEvent(e: LeadEvent, onChanged: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    if (open) EventDialog(e, onDismiss = { open = false }, onChanged = onChanged)
+    Row(Modifier.padding(start = 6.dp, end = 16.dp).height(IntrinsicSize.Min).combinedClickable(onClick = {}, onLongClick = { open = true })) {
         Rail(Harbour, 14.dp, 8.dp)
         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-            T("${short(e.at)} · ${e.who}", 11, color = Muted)
+            T("${short(e.at)} · ${e.who}${e.editedBy?.let { " · נערך ע״י $it" } ?: ""}", 11, color = Muted)
             e.to?.let {
                 Row(Modifier.padding(top = 2.dp)) {
                     e.from?.let { f -> T("$f ← ", 14, color = Muted) }
@@ -1180,6 +1226,63 @@ private fun TimelineEvent(e: LeadEvent) {
             e.text?.let { T(it, 14, color = Ink2, lineHeight = 21, modifier = Modifier.padding(top = 2.dp)) }
         }
     }
+}
+
+/**
+ * Correct a history line or take it off the lead. Delete takes a second tap. The
+ * server keeps a removed line with who removed it, and marks an edited one —
+ * two partners share this history.
+ */
+@Composable
+private fun EventDialog(e: LeadEvent, onDismiss: () -> Unit, onChanged: () -> Unit) {
+    val api = LocalApi.current
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf(e.text ?: "") }
+    var armed by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(armed) { if (armed) { delay(4000); armed = false } }
+    fun run(call: suspend () -> Result<Unit>) {
+        busy = true
+        error = null
+        scope.launch {
+            when (val r = call()) {
+                is Result.Ok -> { onChanged(); onDismiss() }
+                is Result.Err -> error = r.message
+            }
+            busy = false
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        title = { T("שורה בהיסטוריה", 18, FontWeight.Bold) },
+        text = {
+            Column {
+                T("${short(e.at)} · ${e.who}", 12, color = Muted)
+                e.to?.let { T("${e.from?.let { f -> "$f ← " } ?: ""}$it", 14, FontWeight.Bold, modifier = Modifier.padding(top = 4.dp)) }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), minLines = 2, maxLines = 6)
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    {
+                        if (!armed) armed = true
+                        else { armed = false; run { api.deleteEvent(e.id) } }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (armed) Danger else Color(0xFFFDE8E8)),
+                ) { Text(if (armed) "לחצו שוב למחיקה" else "מחק את השורה", color = if (armed) Color.White else Danger, fontWeight = FontWeight.Bold) }
+                error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 6.dp)) }
+            }
+        },
+        confirmButton = {
+            TextButton({ run { api.editEvent(e.id, text.trim()) } }, enabled = !busy && text.isNotBlank() && text.trim() != (e.text ?: "")) {
+                Text("שמור", color = Harbour, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("ביטול", color = Muted) } },
+    )
 }
 
 // ── Voice ────────────────────────────────────────────────────────────────────

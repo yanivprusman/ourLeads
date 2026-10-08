@@ -169,6 +169,27 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
+    /** Delete for everyone every message the app put in קבוצה ריקה. */
+    suspend fun clearPreview(): Result<ClearResult> {
+        val r = httpRequest("POST", "$base/api/sent/clear-preview", token, "{}".encodeToByteArray(), "application/json; charset=utf-8")
+        if (r.code != 200) return Result.Err(describe(r))
+        return runCatching { Result.Ok(json.decodeFromString(ClearResult.serializer(), r.text)) }
+            .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
+    }
+
+    /** Correct a history line's text. */
+    suspend fun editEvent(id: Int, text: String): Result<Unit> {
+        val body = JsonObject(mapOf("text" to JsonPrimitive(text))).toString().encodeToByteArray()
+        val r = httpRequest("PATCH", "$base/api/events/$id", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
+    /** Take a history line off the lead (the server keeps it, marked with who removed it). */
+    suspend fun deleteEvent(id: Int): Result<Unit> {
+        val r = httpRequest("DELETE", "$base/api/events/$id", token, null, null)
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     /** Add photos straight to a lead (JPEG bytes each). */
     suspend fun addPhotos(leadId: Int, photos: List<ByteArray>): Result<Unit> {
         val boundary = "----ourleadsphotos${photos.sumOf { it.size }}x${photos.size}"
