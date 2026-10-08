@@ -23,6 +23,23 @@ import {
 
 type Item = { at: string; kind: "msg"; m: Msg } | { at: string; kind: "event"; e: LeadEvent };
 
+/** The history's order is this viewer's preference, kept in this browser only. Default: oldest first. */
+const ORDER_KEY = "ourleads.timeline.newestFirst";
+function readNewestFirst(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(ORDER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function saveNewestFirst(v: boolean) {
+  try {
+    window.localStorage.setItem(ORDER_KEY, v ? "1" : "0");
+  } catch {
+    // Storage blocked (private window): the choice lasts until the panel closes.
+  }
+}
+
 export default function LeadDetail({
   lead,
   data,
@@ -40,6 +57,7 @@ export default function LeadDetail({
   const [photo, setPhoto] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [newestFirst, setNewestFirst] = useState(readNewestFirst);
   const source = data.sources.find((s) => s.id === lead.source);
   const partner = source?.actor ?? "שותף";
   const place = [lead.address, lead.city].filter(Boolean).join(", ");
@@ -84,11 +102,11 @@ export default function LeadDetail({
   }
   const setStatus = (s: string) => s !== lead.status && !busy && patch({ status: s, note: note.trim() || undefined });
 
-  // One story, oldest first: what was said on WhatsApp and what was done about it.
+  // One story: what was said on WhatsApp and what was done about it, in the order the viewer chose.
   const timeline: Item[] = [
     ...lead.messages.filter((m) => m.mediaType !== "image").map((m) => ({ at: m.sentAt, kind: "msg" as const, m })),
     ...lead.events.map((e) => ({ at: e.at, kind: "event" as const, e })),
-  ].sort((a, b) => a.at.localeCompare(b.at));
+  ].sort((a, b) => (newestFirst ? b.at.localeCompare(a.at) : a.at.localeCompare(b.at)));
 
   return (
     <div className="fixed inset-0 z-40 flex justify-start bg-ink/40 backdrop-blur-[2px]" onClick={onClose}>
@@ -350,7 +368,29 @@ export default function LeadDetail({
           </div>
           {error && <p className="text-red-700 text-sm">{error}</p>}
 
-          <h3 className="text-[13px] font-bold text-ink-2 pt-2">מה קרה עד עכשיו</h3>
+          <div className="flex items-center justify-between pt-2">
+            <h3 className="text-[13px] font-bold text-ink-2">מה קרה עד עכשיו</h3>
+            <div className="inline-flex rounded-full bg-white border border-line p-0.5 text-xs">
+              {(
+                [
+                  [true, "חדש קודם"],
+                  [false, "ישן קודם"],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={label}
+                  data-id={v ? "timeline-newest-first" : "timeline-oldest-first"}
+                  onClick={() => {
+                    setNewestFirst(v);
+                    saveNewestFirst(v);
+                  }}
+                  className={`rounded-full px-3 py-1 cursor-pointer transition ${newestFirst === v ? "bg-harbour text-white font-semibold" : "text-muted hover:text-ink"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <ol className="relative space-y-3 before:absolute before:inset-y-2 before:start-[15px] before:w-px before:bg-line">
             {timeline.map((it) =>
               it.kind === "msg" ? (

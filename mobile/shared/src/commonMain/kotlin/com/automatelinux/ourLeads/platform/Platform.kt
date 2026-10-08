@@ -51,3 +51,7 @@ expect fun rememberShareText(): (subject: String, text: String) -> Unit
  */
 @Composable
 expect fun rememberPhotoPicker(onPicked: (List<ByteArray>) -> Unit): () -> Unit
+
+/** A per-device on/off preference that survives restarts (a viewer's convenience, never shared state). */
+@Composable
+expect fun rememberBoolPref(key: String, default: Boolean): androidx.compose.runtime.MutableState<Boolean>

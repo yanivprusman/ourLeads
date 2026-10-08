@@ -166,3 +166,16 @@ private fun scaledJpeg(context: Context, uri: android.net.Uri): ByteArray? {
     bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
     return out.toByteArray()
 }
+
+@Composable
+actual fun rememberBoolPref(key: String, default: Boolean): androidx.compose.runtime.MutableState<Boolean> {
+    val prefs = LocalContext.current.getSharedPreferences("ourleads_prefs", Context.MODE_PRIVATE)
+    val state = remember(key) { mutableStateOf(prefs.getBoolean(key, default)) }
+    return remember(key, state) {
+        object : androidx.compose.runtime.MutableState<Boolean> by state {
+            override var value: Boolean
+                get() = state.value
+                set(v) { state.value = v; prefs.edit().putBoolean(key, v).apply() }
+        }
+    }
+}

@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.automatelinux.ourLeads.data.*
+import com.automatelinux.ourLeads.platform.rememberBoolPref
 import com.automatelinux.ourLeads.platform.PlatformBackHandler
 import com.automatelinux.ourLeads.platform.decodeImage
 import com.automatelinux.ourLeads.platform.VoiceRecorder
@@ -573,7 +574,9 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
         }
     }
 
-    val timeline = (l.messages.filter { it.mediaType != "image" }.map { Item.M(it) } + l.events.map { Item.E(it) }).sortedBy { it.at }
+    var newestFirst by rememberBoolPref("timeline_newest_first", false)
+    val timeline = (l.messages.filter { it.mediaType != "image" }.map { Item.M(it) } + l.events.map { Item.E(it) })
+        .sortedBy { it.at }.let { if (newestFirst) it.reversed() else it }
 
     if (sharing) ShareDialog(l, onDismiss = { sharing = false }, onShared = onChanged)
 
@@ -802,7 +805,18 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                     )
                 }
                 error?.let { T(it, 14, color = Danger, modifier = Modifier.padding(16.dp, 8.dp)) }
-                T("מה קרה עד עכשיו", 13, FontWeight.Bold, Ink2, Modifier.padding(start = 18.dp, top = 24.dp, bottom = 8.dp))
+                Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 24.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    T("מה קרה עד עכשיו", 13, FontWeight.Bold, Ink2, Modifier.weight(1f))
+                    Row(Modifier.clip(CircleShape).background(Color.White).border(1.dp, Line, CircleShape).padding(2.dp)) {
+                        listOf(true to "חדש קודם", false to "ישן קודם").forEach { (v, label) ->
+                            val sel = newestFirst == v
+                            T(
+                                label, 12, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Color.White else Muted,
+                                Modifier.clip(CircleShape).background(if (sel) Harbour else Color.Transparent).clickable { newestFirst = v }.padding(horizontal = 10.dp, vertical = 5.dp),
+                            )
+                        }
+                    }
+                }
             }
             items(timeline) { it ->
                 when (it) {
