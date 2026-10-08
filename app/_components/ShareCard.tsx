@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { when, type Lead } from "./types";
 import SendTextButtons, { type TextTarget } from "./SendTextButtons";
+import RecentSends from "./RecentSends";
 
 /**
  * Send this lead's card to someone outside the board — Dudu before he uses the
@@ -46,6 +47,7 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
   const dropped = effective.has("contact") && !effective.has("photos") ? images.filter((m) => m.phoneShown !== "none" && m.phoneShown !== "partial").length : 0;
 
   const [version, setVersion] = useState(0);
+  const [sentVersion, setSentVersion] = useState(0);
   const load = () => setVersion((v) => v + 1);
   useEffect(() => {
     let alive = true;
@@ -93,6 +95,7 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
     });
     const body = await res.json();
     if (!res.ok) return body.error ?? `HTTP ${res.status}`;
+    setSentVersion((v) => v + 1);
     onChanged();
     return null;
   }
@@ -202,6 +205,7 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
         <div className="pt-1 space-y-2">
           <h4 className="text-[13px] font-bold text-ink-2">או כטקסט בוואטסאפ</h4>
           <SendTextButtons idPrefix="share-text" what="הכרטיס" send={sendText} resetKey={[...effective].sort().join(",")} />
+          <RecentSends leadId={lead.id} refreshKey={sentVersion} onChanged={onChanged} />
         </div>
         {error && <p className="text-red-700 text-sm">{error}</p>}
 

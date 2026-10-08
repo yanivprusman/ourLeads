@@ -1,6 +1,6 @@
 import "server-only";
-import { createHash } from "node:crypto";
-import { sendText } from "./bridge";
+import { createHash, randomBytes } from "node:crypto";
+import { revokeText, sendText } from "./bridge";
 import { CUSTOMER, TEXT_TARGETS, users, type TextTarget } from "./config";
 import { money, sayWhen } from "./deal";
 import { CLOSED, addEvent, customerDue, getDb, israelToday, now, type LeadRow } from "./db";
@@ -169,13 +169,15 @@ export function reportText(): { parts: string[]; leadIds: number[] } {
   return { parts, leadIds: leads.map((l) => l.id) };
 }
 
-async function send(target: TextTarget, text: string, kind: "card" | "report", leadIds: number[], who: string): Promise<void> {
+async function send(target: TextTarget, text: string, kind: "card" | "report", leadIds: number[], who: string, batch: string): Promise<void> {
   const chat = TEXT_TARGETS[target];
-  await sendText(chat.jid, text);
+  const messageId = await sendText(chat.jid, text);
   getDb()
-    .prepare("INSERT INTO sent_texts (hash, chat_jid, kind, lead_ids, sent_by, sent_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(hash(text), chat.jid, kind, JSON.stringify(leadIds), who, now());
+    .prepare("INSERT INTO sent_texts (hash, chat_jid, kind, lead_ids, sent_by, sent_at, message_id, batch, target) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(hash(text), chat.jid, kind, JSON.stringify(leadIds), who, now(), messageId, batch, target);
 }
+
+const newBatch = () => randomBytes(8).toString("hex");
 
 /** Send one card as text, leaving out what `hide` names, and log it on the lead. */
 export async function sendCardText(leadId: number, hide: Hideable[], who: string, target: TextTarget): Promise<{ to: string }> {
@@ -183,7 +185,7 @@ export async function sendCardText(leadId: number, hide: Hideable[], who: string
   const card = leadCard(leadId, eff);
   if (!card) throw new Error(`no lead #${leadId}`);
   const to = TEXT_TARGETS[target].label;
-  await send(target, cardText(leadId, card), "card", [leadId], who);
+  await send(target, cardText(leadId, card), "card", [leadId], who, newBatch());
   const what = eff.length ? `בלי ${eff.map((h) => HIDE_LABELS[h]).join(", ")}` : "כרטיס מלא";
   addEvent(leadId, who, "share", `הכרטיס נשלח כטקסט ל${to} (${what})`);
   return { to };
@@ -195,10 +197,82 @@ export async function sendCardText(leadId: number, hide: Hideable[], who: string
  */
 export async function sendReport(who: string, target: TextTarget): Promise<{ to: string; messages: number; leads: number }> {
   const { parts, leadIds } = reportText();
-  for (const p of parts) await send(target, p, "report", leadIds, who);
+  const batch = newBatch();
+  for (const p of parts) await send(target, p, "report", leadIds, who, batch);
   const to = TEXT_TARGETS[target].label;
   if (target !== "preview") for (const id of leadIds) addEvent(id, who, "share", `נכלל בדוח הלידים שנשלח ל${to}`);
   return { to, messages: parts.length, leads: leadIds.length };
+}
+
+/**
+ * WhatsApp lets a sender delete a message for everyone for about two days; we
+ * offer it a little short of that, so the button never promises what WhatsApp
+ * will then refuse.
+ */
+const DELETE_WINDOW_MS = 40 * 3600_000;
+
+export interface SentBatch {
+  batch: string;
+  kind: "card" | "report";
+  to: string;
+  target: TextTarget;
+  leadIds: number[];
+  messages: number;
+  sentBy: string;
+  sentAt: string;
+}
+
+/**
+ * Recent sends that can still be deleted, newest first — one entry per send (a
+ * report's two messages are one entry). `leadId` narrows to the cards of one
+ * lead; without it, the reports.
+ */
+export function deletableSends(leadId?: number): SentBatch[] {
+  const since = new Date(Date.now() - DELETE_WINDOW_MS).toISOString();
+  const rows = getDb()
+    .prepare(
+      `SELECT batch, kind, target, lead_ids, sent_by, MIN(sent_at) AS sent_at, COUNT(*) AS n FROM sent_texts
+       WHERE message_id IS NOT NULL AND deleted_at IS NULL AND sent_at >= ? AND kind = ?
+       GROUP BY batch ORDER BY sent_at DESC`,
+    )
+    .all(since, leadId === undefined ? "report" : "card") as unknown as { batch: string; kind: "card" | "report"; target: TextTarget; lead_ids: string; sent_by: string; sent_at: string; n: number }[];
+  return rows
+    .map((r) => ({
+      batch: r.batch,
+      kind: r.kind,
+      target: r.target,
+      to: TEXT_TARGETS[r.target]?.label ?? r.target,
+      leadIds: JSON.parse(r.lead_ids) as number[],
+      messages: r.n,
+      sentBy: r.sent_by,
+      sentAt: r.sent_at,
+    }))
+    .filter((b) => leadId === undefined || b.leadIds.includes(leadId));
+}
+
+/**
+ * Delete a send for everyone — every message in it. Logged on the leads it was
+ * logged on when sent (a card anywhere, a report to Dudu); a report to the
+ * preview group touched no lead and its deletion touches none either.
+ */
+export async function deleteSend(batch: string, who: string): Promise<{ deleted: number }> {
+  const d = getDb();
+  const rows = d
+    .prepare("SELECT id, chat_jid, message_id, kind, target, lead_ids, sent_at FROM sent_texts WHERE batch = ? AND deleted_at IS NULL AND message_id IS NOT NULL")
+    .all(batch) as unknown as { id: number; chat_jid: string; message_id: string; kind: string; target: TextTarget; lead_ids: string; sent_at: string }[];
+  if (!rows.length) throw new Error("אין מה למחוק — ההודעות כבר נמחקו, או שלא נשלחו מכאן");
+  for (const r of rows) {
+    await revokeText(r.chat_jid, r.message_id);
+    d.prepare("UPDATE sent_texts SET deleted_at = ? WHERE id = ?").run(now(), r.id);
+  }
+  const first = rows[0];
+  const to = TEXT_TARGETS[first.target]?.label ?? first.target;
+  if (first.kind === "card" || first.target !== "preview") {
+    const what = first.kind === "card" ? `הכרטיס שנשלח ל${to}` : `דוח הלידים שנשלח ל${to}`;
+    for (const id of JSON.parse(first.lead_ids) as number[])
+      if (d.prepare("SELECT 1 FROM leads WHERE id = ?").get(id)) addEvent(id, who, "share", `${what} נמחק מהוואטסאפ`);
+  }
+  return { deleted: rows.length };
 }
 
 /**

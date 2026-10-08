@@ -178,6 +178,12 @@ export function getDb(): DatabaseSync {
   // Whether a photo shows the customer's phone number (lib/photoPhones.ts): none | partial | full, null = not looked at yet.
   const msgCols = new Set((db.prepare("PRAGMA table_info(messages)").all() as { name: string }[]).map((c) => c.name));
   if (!msgCols.has("phone_shown")) db.exec("ALTER TABLE messages ADD COLUMN phone_shown TEXT");
+  // sent_texts, later: the WhatsApp id of each sent message (so it can be deleted for
+  // everyone), the send it belongs to (a report is two messages, deleted together),
+  // and when it was deleted.
+  const sentCols = new Set((db.prepare("PRAGMA table_info(sent_texts)").all() as { name: string }[]).map((c) => c.name));
+  for (const name of ["message_id", "batch", "target", "deleted_at"])
+    if (!sentCols.has(name)) db.exec(`ALTER TABLE sent_texts ADD COLUMN ${name} TEXT`);
   // The old pipeline → the three states. Idempotent: rows already converted match no WHEN.
   db.exec(`
     UPDATE leads SET status = CASE

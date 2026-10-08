@@ -109,8 +109,8 @@ export async function downloadMedia(
   return name;
 }
 
-/** Send a plain text message from Yaniv's own number. */
-export async function sendText(jid: string, message: string): Promise<void> {
+/** Send a plain text message from Yaniv's own number. Returns the sent message's WhatsApp id. */
+export async function sendText(jid: string, message: string): Promise<string> {
   const res = await call(
     "/send",
     {
@@ -120,6 +120,20 @@ export async function sendText(jid: string, message: string): Promise<void> {
     },
     30_000,
   );
-  const json = (await res.json()) as { success: boolean; message?: string };
+  const json = (await res.json()) as { success: boolean; message?: string; message_id?: string };
   if (!json.success) throw new Error(`bridge send failed: ${json.message ?? "unknown error"}`);
+  if (!json.message_id) throw new Error("bridge send returned no message_id — the bridge on the leader is older than /api/revoke");
+  return json.message_id;
+}
+
+/** Delete one of our own sent messages for everyone. WhatsApp refuses once it is too old (~2 days). */
+export async function revokeText(jid: string, messageId: string): Promise<void> {
+  const res = await fetch(`${bridge().apiUrl}/revoke`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${bridge().token}` },
+    body: JSON.stringify({ chat: jid, message_id: messageId }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string };
+  if (!res.ok || !json.success) throw new Error(`bridge revoke failed: ${json.message ?? `HTTP ${res.status}`}`);
 }
