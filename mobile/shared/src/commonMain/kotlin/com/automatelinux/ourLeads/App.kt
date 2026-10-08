@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import com.automatelinux.ourLeads.data.*
 import com.automatelinux.ourLeads.platform.rememberBoolPref
 import com.automatelinux.ourLeads.platform.PlatformBackHandler
+import com.automatelinux.ourLeads.platform.VideoPlayer
 import com.automatelinux.ourLeads.platform.decodeImage
 import com.automatelinux.ourLeads.platform.VoiceRecorder
 import com.automatelinux.ourLeads.platform.rememberContactSync
@@ -544,6 +545,9 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     var note by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var photo by remember { mutableStateOf<Int?>(null) } // index into photos, open in the viewer
+    var playing by remember { mutableStateOf<String?>(null) } // a video's full URL, open in the player
+    var playError by remember { mutableStateOf<String?>(null) }
+    PlatformBackHandler(enabled = playing != null) { playing = null }
     var said by remember(l.id) { mutableStateOf<CommandReply?>(null) }
     var talkError by remember(l.id) { mutableStateOf<String?>(null) }
     var sharing by remember(l.id) { mutableStateOf(false) }
@@ -602,7 +606,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                         val w = if (hero == 1) Modifier.fillParentMaxWidth() else Modifier.width(220.dp)
                         LazyRow(Modifier.height(260.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             items(videos) { v ->
-                                Box(Modifier.fillParentMaxHeight().then(w).clickable { uri.openUri(api.base + v.mediaUrl!!) }) {
+                                Box(Modifier.fillParentMaxHeight().then(w).clickable { playError = null; playing = api.base + v.mediaUrl!! }) {
                                     RemoteImage(v.posterUrl!!, Modifier.fillMaxSize())
                                     Box(
                                         Modifier.align(Alignment.Center).padding(bottom = 40.dp).size(56.dp).clip(CircleShape)
@@ -858,12 +862,23 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
             }
             items(timeline) { it ->
                 when (it) {
-                    is Item.M -> TimelineMessage(it.m, partner, l.customerName ?: "הלקוח")
+                    is Item.M -> TimelineMessage(it.m, partner, l.customerName ?: "הלקוח") { url -> playError = null; playing = api.base + url }
                     is Item.E -> TimelineEvent(it.e, onChanged)
                 }
             }
         }
         StatusScrim()
+        playing?.let { url ->
+            Box(Modifier.fillMaxSize().background(Color.Black)) {
+                VideoPlayer(url, Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) { playError = it }
+                playError?.let { T(it, 15, color = Color.White, modifier = Modifier.align(Alignment.Center).padding(24.dp)) }
+                Box(
+                    Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(12.dp).size(42.dp).clip(CircleShape)
+                        .background(Color.White.copy(alpha = .2f)).clickable { playing = null },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Default.Close, "סגירה", tint = Color.White) }
+            }
+        }
         photo?.let { start ->
             // Swipe through all the lead's photos; a tap anywhere closes.
             val pager = rememberPagerState(initialPage = start) { photos.size }
@@ -1325,7 +1340,7 @@ private fun ProposalCard(p: Proposal, busy: Boolean, onResolve: (Boolean) -> Uni
 }
 
 @Composable
-private fun TimelineMessage(m: Msg, partner: String, customer: String) {
+private fun TimelineMessage(m: Msg, partner: String, customer: String, onPlayVideo: (String) -> Unit) {
     val uri = LocalUriHandler.current
     val api = LocalApi.current
     Row(Modifier.padding(start = 6.dp, end = 16.dp).height(IntrinsicSize.Min)) {
@@ -1338,7 +1353,7 @@ private fun TimelineMessage(m: Msg, partner: String, customer: String) {
             T("${if (m.fromMe) "אני" else if (m.fromCustomer) customer else partner} · ${short(m.sentAt)} · וואטסאפ", 11, color = Muted)
             if ((m.mediaType == "audio" || m.mediaType == "video") && m.mediaUrl != null) {
                 Row(
-                    Modifier.padding(top = 6.dp).clip(CircleShape).background(Paper).clickable { uri.openUri(api.base + m.mediaUrl) }
+                    Modifier.padding(top = 6.dp).clip(CircleShape).background(Paper).clickable { if (m.mediaType == "video") onPlayVideo(m.mediaUrl) else uri.openUri(api.base + m.mediaUrl) }
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

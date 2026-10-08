@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import path from "node:path";
 import { isMediaSig } from "@/lib/auth";
 import { dataDir } from "@/lib/config";
@@ -32,15 +32,33 @@ export async function GET(request: Request, ctx: RouteContext<"/api/media/[file]
       return new Response(`poster failed: ${e instanceof Error ? e.message : e}`, { status: 500 });
     }
   }
+  let fh;
   try {
-    const bytes = await readFile(path.join(dir, file));
-    return new Response(bytes, {
-      headers: {
-        "Content-Type": TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream",
-        "Cache-Control": "private, max-age=31536000, immutable",
-      },
-    });
+    fh = await open(path.join(dir, file));
   } catch {
     return new Response("not found", { status: 404 });
+  }
+  try {
+    const size = (await fh.stat()).size;
+    const headers: Record<string, string> = {
+      "Content-Type": TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream",
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "Accept-Ranges": "bytes",
+    };
+    // Byte ranges: Safari on an iPhone will not play a video without them, and seeking needs them everywhere.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get("range") ?? "");
+    if (!range) return new Response(new Uint8Array(await fh.readFile()), { headers });
+    let start = range[1] === "" ? size - Number(range[2]) : Number(range[1]);
+    let end = range[1] === "" || range[2] === "" ? size - 1 : Math.min(Number(range[2]), size - 1);
+    if (start < 0) start = 0;
+    if (start > end || start >= size) {
+      return new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${size}` } });
+    }
+    end = Math.max(end, start);
+    const buf = new Uint8Array(end - start + 1);
+    await fh.read(buf, 0, buf.length, start);
+    return new Response(buf, { status: 206, headers: { ...headers, "Content-Range": `bytes ${start}-${end}/${size}` } });
+  } finally {
+    await fh.close();
   }
 }

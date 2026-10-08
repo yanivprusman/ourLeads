@@ -55,3 +55,10 @@ expect fun rememberPhotoPicker(onPicked: (List<ByteArray>) -> Unit): () -> Unit
 /** A per-device on/off preference that survives restarts (a viewer's convenience, never shared state). */
 @Composable
 expect fun rememberBoolPref(key: String, default: Boolean): androidx.compose.runtime.MutableState<Boolean>
+
+/**
+ * Plays a video inside the app (full URL, already signed), with the system's play/pause/seek
+ * controls. Handing it to Chrome left the app and put the link in the browser's history.
+ */
+@Composable
+expect fun VideoPlayer(url: String, modifier: androidx.compose.ui.Modifier, onError: (String) -> Unit)

@@ -179,3 +179,31 @@ actual fun rememberBoolPref(key: String, default: Boolean): androidx.compose.run
         }
     }
 }
+
+@Composable
+actual fun VideoPlayer(url: String, modifier: androidx.compose.ui.Modifier, onError: (String) -> Unit) {
+    androidx.compose.ui.viewinterop.AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            // VideoView keeps the video's own aspect ratio, so it sits centred in a frame.
+            val video = android.widget.VideoView(ctx)
+            val frame = android.widget.FrameLayout(ctx)
+            frame.addView(
+                video,
+                android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.CENTER,
+                ),
+            )
+            val controls = android.widget.MediaController(ctx)
+            controls.setAnchorView(video)
+            video.setMediaController(controls)
+            video.setOnPreparedListener { video.start(); controls.show(0) }
+            video.setOnErrorListener { _, what, extra -> onError("הסרטון לא נטען ($what/$extra)"); true }
+            video.setVideoURI(android.net.Uri.parse(url))
+            frame
+        },
+        onRelease = { frame -> (frame.getChildAt(0) as android.widget.VideoView).stopPlayback() },
+    )
+}
