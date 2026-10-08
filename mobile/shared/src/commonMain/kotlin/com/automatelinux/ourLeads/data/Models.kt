@@ -116,4 +116,4 @@ data class ErrorBody(val error: String? = null)
 data class ShareLink(val token: String, val url: String)
 
 @Serializable
-data class SentTo(val to: String)
+data class ReportText(val parts: List<String>, val leadIds: List<Int> = emptyList())

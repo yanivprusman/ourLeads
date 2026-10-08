@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LeadDetail from "./LeadDetail";
+import ReportSheet from "./ReportSheet";
 import VoiceDock, { type CommandReply } from "./VoiceDock";
 import Mark from "./Mark";
 import Calendar, { sayDay } from "./Calendar";
@@ -31,6 +32,7 @@ export default function Board() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("open");
   const [mode, setMode] = useState<"leads" | "calendar">("leads");
+  const [reporting, setReporting] = useState(false);
   const [source, setSource] = useState<string>("all");
   // Whose hands the lead is in — any of these ids (user ids, the customer, NOBODY). Empty = everyone (הכל).
   const [balls, setBalls] = useState<string[]>([]);
@@ -96,12 +98,21 @@ export default function Board() {
                 {openCount} פתוחים · שלום {data.me.name}
               </p>
             </div>
-            {data.pending > 0 && (
-              <span className="ms-auto text-xs bg-white/10 rounded-full px-2.5 py-1 flex items-center gap-1.5">
-                <span className="size-1.5 rounded-full bg-amber animate-pulse" />
-                {data.pending} הודעות בקריאה
-              </span>
-            )}
+            <div className="ms-auto flex items-center gap-2">
+              {data.pending > 0 && (
+                <span className="text-xs bg-white/10 rounded-full px-2.5 py-1 flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-amber animate-pulse" />
+                  {data.pending} הודעות בקריאה
+                </span>
+              )}
+              <button
+                data-id="open-report"
+                onClick={() => setReporting(true)}
+                className="text-sm font-semibold bg-white/10 hover:bg-white/20 active:bg-white/30 rounded-full px-3 py-1.5 cursor-pointer transition"
+              >
+                דוח לדודו
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -200,6 +211,7 @@ export default function Board() {
       </div>
 
       {open && <LeadDetail lead={open} data={data} onClose={() => setOpenId(null)} onChanged={load} />}
+      {reporting && <ReportSheet onClose={() => setReporting(false)} onChanged={load} />}
 
       <VoiceDock
         reply={reply}

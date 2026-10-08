@@ -140,6 +140,20 @@ export function getDb(): DatabaseSync {
       revoked_at TEXT
     );
     CREATE INDEX IF NOT EXISTS shares_lead ON shares(lead_id);
+    -- Lead text the app sent to WhatsApp (lib/cardText.ts), by a hash of the exact
+    -- message. When the ingest later reads that message in a partner chat it knows
+    -- it is ours: sent there directly (already logged) or forwarded from the preview
+    -- group (log it then) — and never extracted as a new lead either way.
+    CREATE TABLE IF NOT EXISTS sent_texts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hash TEXT NOT NULL,
+      chat_jid TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      lead_ids TEXT NOT NULL,
+      sent_by TEXT NOT NULL,
+      sent_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS sent_texts_hash ON sent_texts(hash);
   `);
   // The deal: what the client pays, and what the subcontractor who does it gets.
   // Added after the first leads existed, so it is a migration, not part of CREATE.

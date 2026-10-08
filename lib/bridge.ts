@@ -7,7 +7,7 @@ import { bridge } from "./config";
  * Access to the WhatsApp bridge on the leader. All calls go through its
  * authenticated endpoints — never a second whatsmeow session (one account
  * allows exactly one linked client; a second one kicks the first off forever).
- * The only send is `sendText`, to `REPORT_CHAT` — see lib/config.ts.
+ * The only send is `sendText`, to a `TEXT_TARGETS` chat — see lib/config.ts.
  */
 
 async function call(pathname: string, init: RequestInit, timeoutMs: number): Promise<Response> {

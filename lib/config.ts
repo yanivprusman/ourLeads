@@ -141,18 +141,29 @@ export interface BridgeConfig {
 }
 
 /**
- * Where a lead card goes as plain WhatsApp text (lib/cardText.ts): Yaniv's own
- * preview group "קבוצה ריקה", and nowhere else. Dudu does not open links on his
- * phone, so the card has to be readable in the chat itself; Yaniv reads it there
- * and forwards it to whoever it is for. The app never sends to a person — a
- * message in someone's chat is his own word, and he decides when to give it.
+ * Where lead text (one card, or the report of every open lead — lib/cardText.ts)
+ * can be sent. Dudu does not open links on his phone, so the details have to be
+ * readable in the chat itself.
+ *
+ * - `preview`: Yaniv's own group "קבוצה ריקה". Read it there first, forward or
+ *   send for real once it is right.
+ * - `dudu`: Dudu's private chat — sent from Yaniv's own number, in his name. The
+ *   app asks for a second tap before this one.
+ *
+ * Nobody else: a message in someone's chat is Yaniv's word, so each recipient is
+ * a decision written here, not a phone number typed into a form.
  */
-export const REPORT_CHAT = { jid: "120363427371815253@g.us", label: "קבוצה ריקה" } as const;
+export const TEXT_TARGETS = {
+  preview: { jid: "120363427371815253@g.us", label: "קבוצה ריקה" },
+  dudu: { jid: "972533325272@s.whatsapp.net", label: "דודו" },
+} as const;
+export type TextTarget = keyof typeof TEXT_TARGETS;
+export const isTextTarget = (v: unknown): v is TextTarget => typeof v === "string" && Object.hasOwn(TEXT_TARGETS, v);
 
 /**
  * The one linked WhatsApp bridge lives on the leader. This app READS it —
  * through the authenticated /api/dbquery and /api/download endpoints — and
- * sends exactly one thing: a lead card to `REPORT_CHAT`.
+ * sends lead text to `TEXT_TARGETS` and nowhere else.
  */
 export function bridge(): BridgeConfig {
   const file = required("OURLEADS_BRIDGE_CONFIG");

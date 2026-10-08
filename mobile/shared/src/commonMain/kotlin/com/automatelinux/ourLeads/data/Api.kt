@@ -130,16 +130,29 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
     }
 
     /**
-     * Send this lead's card as plain WhatsApp text to the preview group, leaving out
-     * what [hide] names. Returns the group's name.
+     * Send this lead's card as plain WhatsApp text to [to] ("preview" = קבוצה ריקה,
+     * "dudu"), leaving out what [hide] names.
      */
-    suspend fun sendCardText(leadId: Int, hide: List<String>): Result<String> {
-        val body = JsonObject(mapOf("hide" to kotlinx.serialization.json.JsonArray(hide.map { JsonPrimitive(it) })))
+    suspend fun sendCardText(leadId: Int, hide: List<String>, to: String): Result<Unit> {
+        val body = JsonObject(mapOf("to" to JsonPrimitive(to), "hide" to kotlinx.serialization.json.JsonArray(hide.map { JsonPrimitive(it) })))
             .toString().encodeToByteArray()
         val r = httpRequest("POST", "$base/api/leads/$leadId/send-text", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
+    /** The report of every open lead, exactly as it would be sent — one string per WhatsApp message. */
+    suspend fun report(): Result<List<String>> {
+        val r = httpRequest("GET", "$base/api/report", token, null, null)
         if (r.code != 200) return Result.Err(describe(r))
-        return runCatching { Result.Ok(json.decodeFromString(SentTo.serializer(), r.text).to) }
+        return runCatching { Result.Ok(json.decodeFromString(ReportText.serializer(), r.text).parts) }
             .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
+    }
+
+    /** Send the report of every open lead to [to] ("preview" or "dudu"). */
+    suspend fun sendReport(to: String): Result<Unit> {
+        val body = JsonObject(mapOf("to" to JsonPrimitive(to))).toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/report", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
     /** Add photos straight to a lead (JPEG bytes each). */

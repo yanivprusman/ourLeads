@@ -16,6 +16,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -296,6 +299,8 @@ private fun LeadList(
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
     val haptic = LocalHapticFeedback.current
+    var reporting by remember { mutableStateOf(false) }
+    if (reporting) ReportDialog(onDismiss = { reporting = false })
 
     val header: @Composable () -> Unit = {
             Column(Modifier.fillMaxWidth().background(Band).statusBarsPadding().padding(top = 14.dp, bottom = 16.dp)) {
@@ -307,6 +312,11 @@ private fun LeadList(
                     T("$openCount פתוחים · שלום ${d.me.name}", 13, color = Color.White.copy(alpha = .72f))
                 }
                 Spacer(Modifier.weight(1f))
+                T(
+                    "דוח לדודו", 13, FontWeight.SemiBold, Color.White,
+                    Modifier.clip(CircleShape).background(Color.White.copy(alpha = .12f)).clickable { reporting = true }.padding(horizontal = 12.dp, vertical = 7.dp),
+                )
+                if (d.pending > 0) Spacer(Modifier.width(8.dp))
                 if (d.pending > 0) Row(
                     Modifier.clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -835,7 +845,6 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
     var hide by remember { mutableStateOf(setOf<String>()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var sentTo by remember { mutableStateOf<String?>(null) }
     val forced = hide.any { it in setOf("contact", "address", "price") }
     val effective = if (forced) hide + "history" else hide
     // Without the customer's details, the server leaves out the photos that show his whole number
@@ -854,7 +863,7 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
                     val locked = id == "history" && forced
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                            .clickable(enabled = !locked) { hide = if (id in hide) hide - id else hide + id; sentTo = null }.padding(vertical = 2.dp),
+                            .clickable(enabled = !locked) { hide = if (id in hide) hide - id else hide + id }.padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(id in effective, onCheckedChange = null, enabled = !locked, colors = CheckboxDefaults.colors(checkedColor = Harbour))
@@ -867,25 +876,15 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
                     "${if (dropped == images.size) "כל התמונות" else "$dropped מתוך ${images.size} תמונות"} לא ייכנסו לכרטיס — רואים בהן את המספר של הלקוח, או שעוד לא נבדקו.", 12, color = Color(0xFF8A4A0B),
                     modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFFF1DF)).padding(10.dp),
                 )
-                Spacer(Modifier.height(10.dp))
-                // The card as plain text in the preview group — for a reader who does not open links.
-                Button(
-                    {
-                        busy = true
-                        error = null
-                        scope.launch {
-                            when (val r = api.sendCardText(l.id, effective.toList())) {
-                                is Result.Ok -> { sentTo = r.value; onShared() }
-                                is Result.Err -> error = r.message
-                            }
-                            busy = false
-                        }
-                    },
-                    enabled = !busy && sentTo == null,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Israel),
-                ) { Text(sentTo?.let { "נשלח כטקסט ל$it ✓" } ?: "שלח כטקסט לקבוצה ריקה", color = Color.White, fontWeight = FontWeight.Bold) }
-                T("הפרטים עצמם בתוך ההודעה, בלי קישור — לקריאה ישר בוואטסאפ.", 12, color = Muted)
+                Spacer(Modifier.height(12.dp))
+                T("או כטקסט בוואטסאפ", 13, FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                SendTextButtons("הכרטיס", resetKey = effective.sorted().joinToString(",")) { to ->
+                    when (val r = api.sendCardText(l.id, effective.toList(), to)) {
+                        is Result.Ok -> { onShared(); null }
+                        is Result.Err -> r.message
+                    }
+                }
                 error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
@@ -905,6 +904,102 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
             ) { Text("שתף קישור", color = Harbour, fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onDismiss) { Text("ביטול", color = Muted) } },
+    )
+}
+
+/**
+ * The two places lead text goes (server: lib/config.ts TEXT_TARGETS): the preview
+ * group "קבוצה ריקה" to read it first, and Dudu. Sending to Dudu is in Yaniv's name
+ * in a real chat, so the first tap only arms it (it disarms after 4 s) and the
+ * second sends. [send] returns an error message, or null when sent. A new
+ * [resetKey] (e.g. what to hide) clears the "sent ✓" marks — it would be a new message.
+ */
+@Composable
+private fun SendTextButtons(what: String, resetKey: String = "", send: suspend (to: String) -> String?) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf<String?>(null) }
+    var sent by remember(resetKey) { mutableStateOf(setOf<String>()) }
+    var armed by remember(resetKey) { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(armed) { if (armed) { kotlinx.coroutines.delay(4000); armed = false } }
+    fun go(to: String) {
+        if (to == "dudu" && !armed) { armed = true; return }
+        armed = false
+        busy = to
+        error = null
+        scope.launch {
+            val err = send(to)
+            busy = null
+            if (err != null) error = err else sent = sent + to
+        }
+    }
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                { go("preview") }, enabled = busy == null, modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
+            ) { Text(if (busy == "preview") "שולח…" else if ("preview" in sent) "בקבוצה ריקה ✓" else "לקבוצה ריקה (בדיקה)", color = Harbour, fontSize = 13.sp, textAlign = TextAlign.Center) }
+            Button(
+                { go("dudu") }, enabled = busy == null, modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = if (armed) Amber else Israel),
+            ) {
+                Text(
+                    when { busy == "dudu" -> "שולח…"; armed -> "לחצו שוב לשליחה"; "dudu" in sent -> "נשלח לדודו ✓"; else -> "שלח את $what לדודו" },
+                    color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                )
+            }
+        }
+        T("הפרטים עצמם בתוך ההודעה, בלי קישור. לדודו — מהמספר שלך, בצ׳אט שלכם.", 12, color = Muted, modifier = Modifier.padding(top = 4.dp))
+        error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 6.dp)) }
+    }
+}
+
+/**
+ * The report of every open lead, exactly as the server will send it: read it here,
+ * send it to the preview group to see it as Dudu will, then send it to Dudu.
+ */
+@Composable
+private fun ReportDialog(onDismiss: () -> Unit) {
+    val api = LocalApi.current
+    var parts by remember { mutableStateOf<List<String>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var version by remember { mutableStateOf(0) }
+    LaunchedEffect(version) {
+        when (val r = api.report()) {
+            is Result.Ok -> parts = r.value
+            is Result.Err -> error = r.message
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        title = { T("דוח כל הלידים", 18, FontWeight.Bold) },
+        text = {
+            Column {
+                T(
+                    "כל הלידים הפתוחים, לפי אצל מי הכדור. שלחו קודם לקבוצה ריקה ובדקו שם, ואז לדודו." +
+                        (parts?.takeIf { it.size > 1 }?.let { " נשלח כ-${it.size} הודעות." } ?: ""),
+                    13, color = Muted,
+                )
+                Spacer(Modifier.height(8.dp))
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    if (parts == null && error == null) T("טוען…", 13, color = Muted)
+                    parts?.forEach { p ->
+                        T(p, 13, modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFE7F6E9)).padding(10.dp))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                error?.let { T(it, 13, color = Danger) }
+                if (parts != null) SendTextButtons("הדוח") { to ->
+                    when (val r = api.sendReport(to)) {
+                        is Result.Ok -> { version++; null }
+                        is Result.Err -> r.message
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onDismiss) { Text("סגירה", color = Muted) } },
     )
 }
 

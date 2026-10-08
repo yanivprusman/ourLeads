@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { when, type Lead } from "./types";
+import SendTextButtons, { type TextTarget } from "./SendTextButtons";
 
 /**
  * Send this lead's card to someone outside the board — Dudu before he uses the
@@ -36,7 +37,6 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
   const [error, setError] = useState<string | null>(null);
   const [made, setMade] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [sentTo, setSentTo] = useState<string | null>(null);
   const [shares, setShares] = useState<Share[]>([]);
   const historyForced = FORCES_HISTORY.some((f) => hide.has(f));
   const effective = new Set<Field>(historyForced ? [...hide, "history"] : hide);
@@ -59,7 +59,6 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
 
   const toggle = (f: Field) => {
     setMade(null);
-    setSentTo(null);
     setHide((s) => {
       const n = new Set(s);
       if (n.has(f)) n.delete(f);
@@ -85,20 +84,17 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
     onChanged();
   }
 
-  /** The card as plain text in the preview group — for a reader who does not open links. */
-  async function sendText() {
-    setBusy(true);
-    setError(null);
+  /** The card as plain text — for a reader who does not open links. Resolves to an error, or null. */
+  async function sendText(to: TextTarget): Promise<string | null> {
     const res = await fetch(`/api/leads/${lead.id}/send-text`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hide: [...effective] }),
+      body: JSON.stringify({ to, hide: [...effective] }),
     });
-    setBusy(false);
     const body = await res.json();
-    if (!res.ok) return setError(body.error ?? `HTTP ${res.status}`);
-    setSentTo(body.to);
+    if (!res.ok) return body.error ?? `HTTP ${res.status}`;
     onChanged();
+    return null;
   }
 
   async function revoke(token: string) {
@@ -203,15 +199,10 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
             </div>
           </div>
         )}
-        <button
-          data-id="share-send-text"
-          disabled={busy || !!sentTo}
-          onClick={sendText}
-          className="w-full rounded-2xl py-3 bg-israel text-white font-semibold hover:opacity-90 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {sentTo ? `נשלח כטקסט ל${sentTo} ✓` : "שלח כטקסט לקבוצה ריקה"}
-        </button>
-        <p className="text-xs text-muted -mt-2">הפרטים עצמם בתוך ההודעה, בלי קישור — לקריאה ישר בוואטסאפ ולהעברה הלאה.</p>
+        <div className="pt-1 space-y-2">
+          <h4 className="text-[13px] font-bold text-ink-2">או כטקסט בוואטסאפ</h4>
+          <SendTextButtons idPrefix="share-text" what="הכרטיס" send={sendText} resetKey={[...effective].sort().join(",")} />
+        </div>
         {error && <p className="text-red-700 text-sm">{error}</p>}
 
         {shares.length > 0 && (
