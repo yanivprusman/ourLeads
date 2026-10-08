@@ -6,6 +6,7 @@ import ClearPreview from "./ClearPreview";
 import VoiceDock, { type CommandReply } from "./VoiceDock";
 import Mark from "./Mark";
 import Calendar, { sayDay } from "./Calendar";
+import PartnershipView from "./PartnershipView";
 import {
   CLOSED,
   PARTNER_TONE,
@@ -49,7 +50,7 @@ export default function Board() {
   const [data, setData] = useState<BoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("open");
-  const [mode, setMode] = useState<"leads" | "calendar">("leads");
+  const [mode, setMode] = useState<"leads" | "calendar" | "partnership">("leads");
   const [reporting, setReporting] = useState(false);
   const [source, setSource] = useState<string>("all");
   // Whose hands the lead is in — any of these ids (user ids, the customer, NOBODY). Empty = everyone (הכל).
@@ -143,6 +144,7 @@ export default function Board() {
               [
                 ["leads", "לידים"],
                 ["calendar", "יומן"],
+                ["partnership", "שותפות"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -159,6 +161,8 @@ export default function Board() {
               </button>
             ))}
           </div>
+          {mode !== "partnership" && (
+          <>
           <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
             {[{ id: "all", label: "כולם" }, ...data.sources].map((s) => (
               <button
@@ -186,11 +190,13 @@ export default function Board() {
               />
             ))}
           </div>
+          </>
+          )}
           </div>
         </div>
 
         {/* Where the leads stand, with how many are in each. */}
-        <nav className={`max-w-3xl mx-auto px-4 pb-4 overflow-x-auto no-scrollbar ${mode === "calendar" ? "hidden" : ""}`}>
+        <nav className={`max-w-3xl mx-auto px-4 pb-4 overflow-x-auto no-scrollbar ${mode !== "leads" ? "hidden" : ""}`}>
           <div className="flex items-stretch gap-1 min-w-max">
             <Stage
               id="open"
@@ -213,7 +219,9 @@ export default function Board() {
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-3">
         {error && <p className="text-red-700 text-sm">{error}</p>}
 
-        {mode === "calendar" ? (
+        {mode === "partnership" ? (
+          <PartnershipView data={data} onOpen={(id) => setOpenId(id)} onChanged={load} />
+        ) : mode === "calendar" ? (
           <Calendar data={{ ...data, leads: inSource }} onOpen={(id) => setOpenId(id)} />
         ) : (
           <>

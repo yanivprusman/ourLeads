@@ -154,6 +154,23 @@ export function getDb(): DatabaseSync {
       sent_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS sent_texts_hash ON sent_texts(hash);
+    -- The partnership's terms (lib/partnership.ts): one row, the terms as JSON, and who has
+    -- approved this exact version. Any change clears the approvals — a term nobody agreed to
+    -- must not look agreed.
+    CREATE TABLE IF NOT EXISTS partnership_terms (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      terms TEXT NOT NULL,
+      approvals TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL,
+      updated_by TEXT NOT NULL
+    );
+    -- Every change to the terms and every approval, so "I never agreed to that" has an answer.
+    CREATE TABLE IF NOT EXISTS partnership_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at TEXT NOT NULL,
+      who TEXT NOT NULL,
+      text TEXT NOT NULL
+    );
   `);
   // The deal: what the client pays, and what the subcontractor who does it gets.
   // Added after the first leads existed, so it is a migration, not part of CREATE.
@@ -175,6 +192,21 @@ export function getDb(): DatabaseSync {
     ["check_back_at", "TEXT"],
     // The last time either of us opened it. Not an edit, so it never touches updated_at — only "last touched first" reads it.
     ["viewed_at", "TEXT"],
+    // The partnership's money on a job (lib/split.ts reads it, with the terms in partnership_terms).
+    // Materials, equipment and travel, before VAT — paid before anything is split.
+    ["materials", "REAL"],
+    // Who does the work: "sub" (a subcontractor — nobody's days), or a user id (that partner's days count).
+    ["executor", "TEXT"],
+    // That partner's working days on it.
+    ["work_days", "REAL"],
+    // The day the customer approved the price ("2026-10-06"). A job closed while the partnership
+    // stood is split by its terms even if the work or the money comes after the partners part.
+    ["closed_at", "TEXT"],
+    // The day the customer paid, and the user id whose account the money went into.
+    ["paid_at", "TEXT"],
+    ["collected_by", "TEXT"],
+    // The day the collector passed the other partner his share. Paid but not settled = owed.
+    ["settled_at", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
   // Whether a photo shows the customer's phone number (lib/photoPhones.ts): none | partial | full, null = not looked at yet.
@@ -249,6 +281,13 @@ export interface LeadRow {
   holder: string | null;
   /** Only while holder = "customer": the day both partners check back with him ("2026-10-09"). */
   check_back_at: string | null;
+  materials: number | null;
+  executor: string | null;
+  work_days: number | null;
+  closed_at: string | null;
+  paid_at: string | null;
+  collected_by: string | null;
+  settled_at: string | null;
   created_at: string;
   updated_at: string;
   last_message_at: string | null;
@@ -354,6 +393,13 @@ export interface LeadPatch {
   meeting_at?: string | null;
   work_start?: string | null;
   work_end?: string | null;
+  materials?: number | null;
+  executor?: string | null;
+  work_days?: number | null;
+  closed_at?: string | null;
+  paid_at?: string | null;
+  collected_by?: string | null;
+  settled_at?: string | null;
 }
 
 const PATCHABLE: (keyof LeadPatch)[] = [
@@ -375,6 +421,13 @@ const PATCHABLE: (keyof LeadPatch)[] = [
   "meeting_at",
   "work_start",
   "work_end",
+  "materials",
+  "executor",
+  "work_days",
+  "closed_at",
+  "paid_at",
+  "collected_by",
+  "settled_at",
 ];
 
 /** Apply field changes and a status change, logging each as an event. */

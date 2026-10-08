@@ -67,6 +67,16 @@ export interface Deal {
   subPhone: string | null;
   subPrice: number | null;
   subVat: boolean | null;
+  /** Materials, equipment, travel — before VAT. */
+  materials: number | null;
+  /** "sub" = a subcontractor does it; a user id = that partner does it himself. */
+  executor: string | null;
+  workDays: number | null;
+  /** The day the customer approved the price — the job is the partnership's from then. */
+  closedAt: string | null;
+  paidAt: string | null;
+  collectedBy: string | null;
+  settledAt: string | null;
 }
 
 export const VAT = 0.18;
@@ -95,6 +105,8 @@ export interface BoardData {
   /** The ball's third place — the customer's hands. */
   customer: { id: string; name: string };
   leads: Lead[];
+  /** The agreement: terms, who approved them, and every change. */
+  partnership: import("./split").PartnershipData;
   unassigned: Msg[];
   pending: number;
 }

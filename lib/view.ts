@@ -2,6 +2,7 @@ import "server-only";
 import { CUSTOMER, SOURCES, users } from "./config";
 import { STATUSES, STATUS_LABELS, customerDue, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
 import { mediaSig } from "./auth";
+import { partnership } from "./partnership";
 
 /** The board as both clients read it: one payload, small enough to send whole. */
 
@@ -50,6 +51,13 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
       subPhone: l.sub_phone,
       subPrice: l.sub_price,
       subVat: l.sub_vat === null ? null : !!l.sub_vat,
+      materials: l.materials,
+      executor: l.executor,
+      workDays: l.work_days,
+      closedAt: l.closed_at,
+      paidAt: l.paid_at,
+      collectedBy: l.collected_by,
+      settledAt: l.settled_at,
     },
     createdAt: l.created_at,
     updatedAt: l.updated_at,
@@ -107,6 +115,7 @@ export function board(me: { id: string; name: string }) {
     /** The ball's third place: the customer's hands (not one of `people`). */
     customer: CUSTOMER,
     leads: leads.map((l) => leadView(l, byLead.get(l.id) ?? [], evByLead.get(l.id) ?? [])),
+    partnership: partnership(),
     unassigned: unassigned.slice(-40).reverse().map((m) => ({ ...messageView(m), source: m.source })),
     pending,
   };

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { ChatIcon, PhoneIcon } from "./Board";
 import DealCard from "./DealCard";
+import SplitCard from "./SplitCard";
 import ScheduleCard from "./ScheduleCard";
 import ShareCard from "./ShareCard";
 import LeadVoice from "./LeadVoice";
@@ -342,6 +343,8 @@ export default function LeadDetail({
           <ScheduleCard key={`s${lead.id}-${lead.meetingAt}-${lead.workStart}-${lead.workEnd}`} lead={lead} busy={busy} onSave={(b) => patch(b)} />
 
           <DealCard key={lead.id} deal={lead.deal} busy={busy} onSave={(d) => patch(d)} />
+
+          <SplitCard lead={lead} data={data} busy={busy} onSave={(b) => patch(b)} />
 
           <div className="bg-white rounded-2xl border border-line divide-y divide-line">
             {lead.nextStep && <Fact k="הצעד הבא" v={lead.nextStep} strong />}

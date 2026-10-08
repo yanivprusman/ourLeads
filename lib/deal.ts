@@ -21,6 +21,27 @@ export function describeDeal(l: LeadRow): string {
 
 export const DEAL_KEYS = ["client_price", "client_vat", "sub_name", "sub_phone", "sub_price", "sub_vat"] as const;
 
+export const MONEY_KEYS = ["materials", "executor", "work_days", "closed_at", "paid_at", "collected_by", "settled_at"] as const;
+
+/** "חלוקה: מבצע יניב, 2 ימי עבודה, חומרים ₪500 · נסגר 6.10 · שולם 9.10 לדודו" — one history line per change. */
+export function describeMoney(l: LeadRow, name: (id: string) => string): string {
+  const parts: string[] = [];
+  const work: string[] = [];
+  if (l.executor) work.push(l.executor === "sub" ? "מבצע קבלן משנה" : `מבצע ${name(l.executor)}`);
+  if (l.work_days != null) work.push(`${l.work_days} ימי עבודה`);
+  if (l.materials != null) work.push(`חומרים ${money(l.materials, 1)}`);
+  if (work.length) parts.push(work.join(", "));
+  if (l.closed_at) parts.push(`הלקוח אישר ${dayMonth(l.closed_at)}`);
+  if (l.paid_at) parts.push(`שולם ${dayMonth(l.paid_at)}${l.collected_by ? ` ל${name(l.collected_by)}` : ""}`);
+  if (l.settled_at) parts.push(`החלק הועבר ${dayMonth(l.settled_at)}`);
+  return parts.length ? `חלוקה: ${parts.join(" · ")}` : "החלוקה נמחקה";
+}
+
+function dayMonth(day: string): string {
+  const [, m, d] = day.split("-").map(Number);
+  return `${d}.${m}`;
+}
+
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 
 /** "חמישי 9.10 10:00" from "2026-10-09T10:00" (local Israel time, no zone). */

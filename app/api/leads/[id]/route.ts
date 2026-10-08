@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { asUser } from "@/lib/http";
 import { addEvent, getLead, isStatus, logFieldEdits, setHolder, updateLead, type LeadPatch } from "@/lib/db";
 import { CUSTOMER, users } from "@/lib/config";
-import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal } from "@/lib/deal";
+import { CALENDAR_KEYS, DEAL_KEYS, MONEY_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal, describeMoney } from "@/lib/deal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,11 +51,35 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     if ("meetingAt" in body) patch.meeting_at = cleanDateTime(body.meetingAt);
     if ("workStart" in body) patch.work_start = cleanDate(body.workStart);
     if ("workEnd" in body) patch.work_end = cleanDate(body.workEnd) ?? (patch.work_start ?? null);
+    // The partnership's money on the job (app/_components/split.ts works it out).
+    if ("materials" in body) patch.materials = num("materials");
+    if ("workDays" in body) patch.work_days = num("workDays");
+    if ("executor" in body) {
+      if (body.executor !== null && body.executor !== "sub" && !people.some((u) => u.id === body.executor))
+        return NextResponse.json({ error: 'executor must be "sub" or a partner id' }, { status: 400 });
+      patch.executor = (body.executor as string | null) ?? null;
+    }
+    if ("collectedBy" in body) {
+      if (body.collectedBy !== null && !people.some((u) => u.id === body.collectedBy))
+        return NextResponse.json({ error: "collectedBy must be a partner id" }, { status: 400 });
+      patch.collected_by = (body.collectedBy as string | null) ?? null;
+    }
+    for (const [k, col] of [
+      ["closedAt", "closed_at"],
+      ["paidAt", "paid_at"],
+      ["settledAt", "settled_at"],
+    ] as const) {
+      if (!(k in body)) continue;
+      const v = body[k] === null ? null : cleanDate(body[k]);
+      if (body[k] !== null && !v) return NextResponse.json({ error: `${k} must be YYYY-MM-DD` }, { status: 400 });
+      patch[col] = v;
+    }
     const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
     const before = getLead(id);
     if (!before) return NextResponse.json({ error: "lead not found" }, { status: 404 });
     const lead = updateLead(id, user.name, patch, isStatus(body.status) ? body.status : null, note);
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(id, user.name, "deal", describeDeal(lead));
+    if (MONEY_KEYS.some((k) => k in patch)) addEvent(id, user.name, "deal", describeMoney(lead, (uid) => people.find((u) => u.id === uid)?.name ?? uid));
     if (CALENDAR_KEYS.some((k) => k in patch)) addEvent(id, user.name, "calendar", describeCalendar(lead));
     logFieldEdits(before, lead, user.name);
     if (holder !== undefined)
