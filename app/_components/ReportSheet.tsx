@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import SendTextButtons, { type TextTarget } from "./SendTextButtons";
 import RecentSends from "./RecentSends";
+import ClearPreview from "./ClearPreview";
 
 /**
  * The report of every open lead as WhatsApp text (lib/cardText.ts reportText):
@@ -63,6 +64,7 @@ export default function ReportSheet({ onClose, onChanged }: { onClose: () => voi
 
         {error ? <p className="text-red-700 text-sm">{error}</p> : parts && <SendTextButtons idPrefix="report" what="הדוח" send={send} />}
         <RecentSends refreshKey={version} onChanged={onChanged} />
+        <ClearPreview onDone={() => setVersion((v) => v + 1)} />
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { revokeText, sendText } from "./bridge";
+import { dbquery, revokeText, sendText } from "./bridge";
 import { CUSTOMER, TEXT_TARGETS, users, type TextTarget } from "./config";
 import { money, sayWhen } from "./deal";
 import { CLOSED, addEvent, customerDue, getDb, israelToday, now, type LeadRow } from "./db";
@@ -273,6 +273,41 @@ export async function deleteSend(batch: string, who: string): Promise<{ deleted:
       if (d.prepare("SELECT 1 FROM leads WHERE id = ?").get(id)) addEvent(id, who, "share", `${what} נמחק מהוואטסאפ`);
   }
   return { deleted: rows.length };
+}
+
+/**
+ * Delete for everyone every message this app has put in the preview group that is
+ * still there. The bridge's own record of the chat is the list — not
+ * `sent_texts` — so sends from before message ids were kept are found too: our
+ * own messages there that carry the app's mark. A message WhatsApp will no
+ * longer delete (too old) is reported, and the rest still go.
+ */
+export async function clearPreview(who: string): Promise<{ deleted: number; failed: string[] }> {
+  const chat = TEXT_TARGETS.preview;
+  const rows = await dbquery(
+    "SELECT id, content FROM messages WHERE chat_jid = ? AND is_from_me = 1 AND deleted_at IS NULL AND content LIKE ? ORDER BY timestamp",
+    [chat.jid, "%ourLeads · %"],
+  );
+  const d = getDb();
+  let deleted = 0;
+  const failed: string[] = [];
+  for (const [id, content] of rows.map((r) => [String(r[0]), String(r[1])])) {
+    const mark = content.match(MARK_IN_TEXT);
+    if (!mark) continue;
+    try {
+      await revokeText(chat.jid, id);
+    } catch (e) {
+      failed.push((e as Error).message);
+      continue;
+    }
+    deleted++;
+    const row = d.prepare("SELECT id, kind FROM sent_texts WHERE message_id = ?").get(id) as { id: number; kind: string } | undefined;
+    if (row) d.prepare("UPDATE sent_texts SET deleted_at = ? WHERE id = ?").run(now(), row.id);
+    // A card sent here was logged on its lead; say it is gone. A report to the preview group touched no lead.
+    if (mark[1] && d.prepare("SELECT 1 FROM leads WHERE id = ?").get(Number(mark[1])))
+      addEvent(Number(mark[1]), who, "share", `הכרטיס שנשלח ל${chat.label} נמחק מהוואטסאפ`);
+  }
+  return { deleted, failed };
 }
 
 /**
