@@ -4,6 +4,7 @@ import { ChatIcon, PhoneIcon } from "./Board";
 import DealCard from "./DealCard";
 import ScheduleCard from "./ScheduleCard";
 import ShareCard from "./ShareCard";
+import LeadVoice from "./LeadVoice";
 import {
   PARTNER_TONE,
   STATES,
@@ -326,6 +327,8 @@ export default function LeadDetail({
             {place && <Fact k="כתובת" v={place} />}
             {lead.details && <p className="p-4 leading-relaxed text-[15px] text-ink-2">{lead.details}</p>}
           </div>
+
+          <LeadVoice leadId={lead.id} onChanged={onChanged} />
 
           <div className="flex gap-2">
             <input

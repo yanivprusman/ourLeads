@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useVoiceCommand } from "./useVoiceCommand";
 
 interface Change {
   leadId: number;
@@ -14,8 +15,6 @@ export interface CommandReply {
   reply: string;
   changes: Change[];
 }
-
-type State = "idle" | "recording" | "working";
 
 /**
  * The way to tell the board something: hold the big button and talk, or switch to the
@@ -33,74 +32,15 @@ export default function VoiceDock({
   onOpenLead: (id: number) => void;
   onDismiss: () => void;
 }) {
-  const [state, setState] = useState<State>("idle");
   const [typing, setTyping] = useState(false);
   const [text, setText] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [elapsed, setElapsed] = useState(0);
-  const rec = useRef<MediaRecorder | null>(null);
-  const chunks = useRef<Blob[]>([]);
-  const startedAt = useRef(0);
+  const { state, error, elapsed, start, stop, send } = useVoiceCommand(onReply);
 
-  useEffect(() => {
-    if (state !== "recording") return;
-    const t = setInterval(() => setElapsed(Date.now() - startedAt.current), 200);
-    return () => clearInterval(t);
-  }, [state]);
-
-  async function send(body: BodyInit, headers?: HeadersInit) {
-    setState("working");
-    setError(null);
-    try {
-      const res = await fetch("/api/command", { method: "POST", body, headers });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      onReply(json as CommandReply);
+  async function sendText() {
+    if (await send({ text })) {
       setText("");
       setTyping(false);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setState("idle");
     }
-  }
-
-  async function start() {
-    if (state !== "idle") return;
-    setError(null);
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError("הדפדפן לא מאפשר מיקרופון בכתובת הזו — אפשר להקליד");
-      setTyping(true);
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const r = new MediaRecorder(stream);
-      chunks.current = [];
-      r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
-      r.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        if (Date.now() - startedAt.current < 600) {
-          setState("idle");
-          setError("החזיקו את הכפתור לאורך כל המשפט");
-          return;
-        }
-        const form = new FormData();
-        form.append("audio", new Blob(chunks.current, { type: r.mimeType || "audio/webm" }), "command.webm");
-        void send(form);
-      };
-      rec.current = r;
-      startedAt.current = Date.now();
-      setElapsed(0);
-      r.start();
-      setState("recording");
-    } catch (e) {
-      setError(`אין גישה למיקרופון: ${(e as Error).message}`);
-    }
-  }
-
-  function stop() {
-    if (rec.current?.state === "recording") rec.current.stop();
   }
 
   const secs = Math.floor(elapsed / 1000);
@@ -159,7 +99,7 @@ export default function VoiceDock({
                 data-id="voice-hold-to-talk"
                 onPointerDown={(e) => {
                   e.currentTarget.setPointerCapture(e.pointerId);
-                  void start();
+                  void start().then((ok) => ok || setTyping(true));
                 }}
                 onPointerUp={stop}
                 onPointerCancel={stop}
@@ -185,7 +125,7 @@ export default function VoiceDock({
               className="flex-1 flex items-center gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (text.trim()) void send(JSON.stringify({ text }), { "Content-Type": "application/json" });
+                if (text.trim()) void sendText();
               }}
             >
               <input
@@ -241,7 +181,7 @@ export default function VoiceDock({
   );
 }
 
-function MicGlyph({ className }: { className: string }) {
+export function MicGlyph({ className }: { className: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
       <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z" />
