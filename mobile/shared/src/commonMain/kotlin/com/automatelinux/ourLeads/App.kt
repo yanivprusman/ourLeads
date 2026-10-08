@@ -329,7 +329,9 @@ private fun LeadList(
                 ) {
                     Box(Modifier.size(6.dp).clip(CircleShape).background(Amber))
                     Spacer(Modifier.width(6.dp))
-                    T("${d.pending} בקריאה", 12, color = Color.White)
+                    // Just the number: with דוח and נקה קבוצה ריקה beside it there is no room for a
+                    // word, and "48 בקריאה" squeezed into a tall empty pill (2026-10-08).
+                    T("${d.pending}", 12, color = Color.White, maxLines = 1)
                 }
             }
             // Leads / calendar
