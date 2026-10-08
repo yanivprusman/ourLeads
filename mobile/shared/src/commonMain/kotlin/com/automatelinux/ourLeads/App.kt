@@ -296,7 +296,10 @@ private fun LeadList(
     onView: (String) -> Unit, onSource: (String) -> Unit, onBalls: (Set<String>) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
 ) {
     val inSource = d.leads.filter { (source == "all" || it.source == source) && (balls.isEmpty() || balls.any { b -> when (b) { NOBODY -> it.holder == null; d.customer.id -> it.holder == b; else -> it.holder == b || it.checkBackDue } }) }
-    val leads = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
+    var touchedFirst by rememberBoolPref("board_touched_first", false)
+    val shown = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
+    // "נגיעה אחרונה" is opt-in: whatever was last edited, messaged or noted goes to the top.
+    val leads = if (touchedFirst) shown.sortedWith(compareByDescending<Lead> { it.touchedAt }.thenByDescending { it.id }) else shown
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
     val openCount = inSource.count { it.status !in CLOSED }
     val haptic = LocalHapticFeedback.current
@@ -391,8 +394,20 @@ private fun LeadList(
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item { header() }
         if (error != null) item { T(error, 14, color = Danger, modifier = Modifier.padding(18.dp, 12.dp)) }
-        item { Spacer(Modifier.height(8.dp)) }
-        // One list in the server's order (latest message first). Status never reorders it:
+        item {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 2.dp), horizontalArrangement = Arrangement.End) {
+                Row(Modifier.clip(CircleShape).background(Color.White).border(1.dp, Line, CircleShape).padding(2.dp)) {
+                    listOf(false to "לפי הגעה", true to "נגיעה אחרונה קודם").forEach { (v, label) ->
+                        val sel = touchedFirst == v
+                        T(
+                            label, 12, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Color.White else Muted,
+                            Modifier.clip(CircleShape).background(if (sel) Harbour else Color.Transparent).clickable { touchedFirst = v }.padding(horizontal = 10.dp, vertical = 5.dp),
+                        )
+                    }
+                }
+            }
+        }
+        // By default one list in the server's order (the order leads came in). Status never reorders it:
         // marking a lead פגישה or עבודה must not make it jump away from where the user tapped it.
         items(leads, key = { it.id }) { LeadCard(d, it, onReply, onError) { onOpen(it.id) } }
         if (leads.isEmpty()) item {

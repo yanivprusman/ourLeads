@@ -61,6 +61,8 @@ data class Lead(
     val createdAt: String,
     val updatedAt: String,
     val lastMessageAt: String? = null,
+    /** The last time anything happened to it (edit, message, history line). */
+    val touchedAt: String = "",
     val messages: List<Msg> = emptyList(),
     val events: List<LeadEvent> = emptyList(),
 )

@@ -28,6 +28,23 @@ const NOBODY = "nobody";
 
 type View = "open" | string;
 
+/** The list's order is this viewer's preference, kept in this browser only. Default: the order leads came in. */
+const ORDER_KEY = "ourleads.board.touchedFirst";
+function readTouchedFirst(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(ORDER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function saveTouchedFirst(v: boolean) {
+  try {
+    window.localStorage.setItem(ORDER_KEY, v ? "1" : "0");
+  } catch {
+    // Storage blocked (private window): the choice lasts until the page reloads.
+  }
+}
+
 export default function Board() {
   const [data, setData] = useState<BoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +56,7 @@ export default function Board() {
   const [balls, setBalls] = useState<string[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
   const [reply, setReply] = useState<CommandReply | null>(null);
+  const [touchedFirst, setTouchedFirst] = useState(readTouchedFirst);
 
   const load = useCallback(async () => {
     try {
@@ -80,9 +98,11 @@ export default function Board() {
       </main>
     );
 
-  const leads = inSource.filter((l) => (view === "open" ? !CLOSED.includes(l.status) : l.status === view));
-  // One list in the server's order (fixed: the order leads came in, newest at the bottom). Status never reorders it:
-  // marking a lead פגישה or עבודה must not make it jump away from where the user tapped it.
+  const shown = inSource.filter((l) => (view === "open" ? !CLOSED.includes(l.status) : l.status === view));
+  // By default one list in the server's order (fixed: the order leads came in, newest at the bottom). Status never
+  // reorders it: marking a lead פגישה or עבודה must not make it jump away from where the user tapped it.
+  // "נגיעה אחרונה" is the opt-in exception: whatever was last edited, messaged or noted goes to the top.
+  const leads = touchedFirst ? [...shown].sort((a, b) => b.touchedAt.localeCompare(a.touchedAt) || b.id - a.id) : shown;
   const open = data.leads.find((l) => l.id === openId) ?? null;
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
   const openCount = inSource.filter((l) => !CLOSED.includes(l.status)).length;
@@ -197,6 +217,28 @@ export default function Board() {
           <Calendar data={{ ...data, leads: inSource }} onOpen={(id) => setOpenId(id)} />
         ) : (
           <>
+        <div className="flex justify-end">
+          <div className="inline-flex rounded-full bg-white border border-line p-0.5 text-xs">
+            {(
+              [
+                [false, "לפי הגעה"],
+                [true, "נגיעה אחרונה קודם"],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={label}
+                data-id={v ? "order-touched-first" : "order-arrival"}
+                onClick={() => {
+                  setTouchedFirst(v);
+                  saveTouchedFirst(v);
+                }}
+                className={`rounded-full px-3 py-1 cursor-pointer transition ${touchedFirst === v ? "bg-harbour text-white font-semibold" : "text-muted hover:text-ink"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         {leads.map((l) => (
           <LeadCard key={l.id} lead={l} data={data} onOpen={() => setOpenId(l.id)} />
         ))}

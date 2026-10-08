@@ -54,6 +54,11 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
     createdAt: l.created_at,
     updatedAt: l.updated_at,
     lastMessageAt: l.last_message_at,
+    /** The last time anything happened to it — an edit, a message, a history line. "Last touched first" sorts by this. */
+    touchedAt: [l.updated_at, l.last_message_at, ...msgs.map((m) => m.sent_at), ...events.map((e) => e.at)].reduce<string>(
+      (a, b) => (b && b > a ? b : a),
+      l.created_at,
+    ),
     messages: msgs.map(messageView),
     events: events.map((e) => ({
       id: e.id,

@@ -54,6 +54,7 @@ export interface Lead {
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
+  touchedAt: string;
   messages: Msg[];
   events: LeadEvent[];
 }
