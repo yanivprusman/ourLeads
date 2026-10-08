@@ -3,25 +3,40 @@ import { useState } from "react";
 import Mark from "./Mark";
 
 export default function SignIn({ linkExpired = false, linkUsed = false }: { linkExpired?: boolean; linkUsed?: boolean }) {
-  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(
     linkUsed ? "הקישור הזה כבר שימש לכניסה — כל קישור עובד פעם אחת. בקשו קישור חדש או הזינו קוד גישה."
     : linkExpired ? "הקישור פג תוקף. בקשו קישור חדש או הזינו קוד גישה." : null,
   );
   const [busy, setBusy] = useState(false);
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Read the field at submit time, not from React state: Chrome's password
+    // autofill paints the dots but fires no input event until the user touches
+    // the page, so state would still be "" and the code would never be sent.
+    const code = String(new FormData(e.currentTarget).get("code") ?? "").trim();
+    if (!code) {
+      setError("הזינו קוד גישה");
+      return;
+    }
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-    setBusy(false);
-    if (res.ok) location.replace("/");
-    else setError(res.status === 401 ? "קוד שגוי" : "השרת לא מוגדר — " + ((await res.json()).error ?? ""));
+    try {
+      const res = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (res.ok) {
+        location.replace("/");
+        return;
+      }
+      setError(res.status === 401 ? "קוד שגוי" : "השרת לא מוגדר — " + ((await res.json().catch(() => ({}))).error ?? res.status));
+    } catch (err) {
+      setError("אין חיבור לשרת — " + (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -34,8 +49,7 @@ export default function SignIn({ linkExpired = false, linkUsed = false }: { link
           data-id="signin-code"
           type="password"
           autoComplete="current-password"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
+          name="code"
           className="mt-4 w-full rounded-xl border border-line px-4 py-3 text-base outline-none focus:border-harbour-2"
           placeholder="קוד גישה"
           dir="ltr"
@@ -43,7 +57,8 @@ export default function SignIn({ linkExpired = false, linkUsed = false }: { link
         {error && <p className="text-red-700 text-sm mt-2">{error}</p>}
         <button
           data-id="signin-submit"
-          disabled={busy || !code}
+          type="submit"
+          disabled={busy}
           className="mt-4 w-full rounded-xl bg-harbour text-white py-3 font-semibold hover:bg-harbour-2 active:scale-[.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           כניסה
