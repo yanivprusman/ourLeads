@@ -312,6 +312,8 @@ private fun LeadList(
                     T("$openCount פתוחים · שלום ${d.me.name}", 13, color = Color.White.copy(alpha = .72f))
                 }
                 Spacer(Modifier.weight(1f))
+                HeaderClear()
+                Spacer(Modifier.width(8.dp))
                 T(
                     "דוח", 13, FontWeight.SemiBold, Color.White,
                     Modifier.clip(CircleShape).background(Color.White.copy(alpha = .12f)).clickable { reporting = true }.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -1052,6 +1054,34 @@ private fun RecentSends(leadId: Int?, refreshKey: Int, onChanged: () -> Unit = {
         }
         error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 6.dp)) }
     }
+}
+
+/** The board header's pill for [ClearPreview]: two taps, and the outcome shows in the pill for a moment. */
+@Composable
+private fun HeaderClear() {
+    val api = LocalApi.current
+    val scope = rememberCoroutineScope()
+    var armed by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(armed) { if (armed) { delay(4000); armed = false } }
+    LaunchedEffect(result) { if (result != null) { delay(6000); result = null } }
+    T(
+        when { busy -> "מוחק…"; armed -> "לחצו שוב"; else -> result ?: "נקה קבוצה ריקה" }, 13, FontWeight.SemiBold, Color.White,
+        Modifier.clip(CircleShape).background(if (armed) Danger else Color.White.copy(alpha = .12f))
+            .clickable(enabled = !busy) {
+                if (!armed) { armed = true; return@clickable }
+                armed = false
+                busy = true
+                scope.launch {
+                    result = when (val r = api.clearPreview()) {
+                        is Result.Ok -> if (r.value.deleted == 0 && r.value.failed.isEmpty()) "אין מה למחוק" else "נמחקו ${r.value.deleted}" + if (r.value.failed.isNotEmpty()) " · ${r.value.failed.size} נכשלו" else ""
+                        is Result.Err -> "המחיקה נכשלה"
+                    }
+                    busy = false
+                }
+            }.padding(horizontal = 12.dp, vertical = 7.dp),
+    )
 }
 
 /** Delete for everyone every message the app put in קבוצה ריקה. Two taps. */

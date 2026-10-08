@@ -5,7 +5,7 @@ import { useState } from "react";
  * Delete for everyone every message this app put in קבוצה ריקה — cards and
  * reports, including ones sent before single deletes existed. Two taps.
  */
-export default function ClearPreview({ onDone }: { onDone?: () => void }) {
+export default function ClearPreview({ onDone, compact }: { onDone?: () => void; compact?: boolean }) {
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -32,7 +32,24 @@ export default function ClearPreview({ onDone }: { onDone?: () => void }) {
         : `נמחקו ${deleted} הודעות${failed.length ? ` · ${failed.length} לא נמחקו (וואטסאפ לא מאפשר למחוק הודעות ישנות)` : ""}`,
     );
     onDone?.();
+    if (compact) setTimeout(() => setResult(null), 6000);
   }
+
+  // The board's header: a small pill on the dark band; the outcome shows in the pill for a moment.
+  if (compact)
+    return (
+      <button
+        data-id="clear-preview-header"
+        disabled={busy}
+        title={error ?? result ?? "מחק מקבוצה ריקה את כל ההודעות שהאפליקציה שלחה"}
+        onClick={go}
+        className={`text-sm font-semibold rounded-full px-3 py-1.5 cursor-pointer transition disabled:opacity-60 disabled:cursor-wait ${
+          armed ? "bg-[#b91c1c] text-white" : error ? "bg-[#fde8e8] text-[#9b1c1c]" : "bg-white/10 hover:bg-white/20 active:bg-white/30"
+        }`}
+      >
+        {busy ? "מוחק…" : armed ? "לחצו שוב למחיקה" : error ? "המחיקה נכשלה" : result ?? "נקה קבוצה ריקה"}
+      </button>
+    );
 
   return (
     <div className="space-y-1">

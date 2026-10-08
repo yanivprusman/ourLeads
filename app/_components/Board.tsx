@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LeadDetail from "./LeadDetail";
 import ReportSheet from "./ReportSheet";
+import ClearPreview from "./ClearPreview";
 import VoiceDock, { type CommandReply } from "./VoiceDock";
 import Mark from "./Mark";
 import Calendar, { sayDay } from "./Calendar";
@@ -105,6 +106,7 @@ export default function Board() {
                   {data.pending} הודעות בקריאה
                 </span>
               )}
+              <ClearPreview compact />
               <button
                 data-id="open-report"
                 onClick={() => setReporting(true)}
