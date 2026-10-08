@@ -13,6 +13,8 @@ data class Msg(
     val content: String = "",
     val mediaType: String = "",
     val mediaUrl: String? = null,
+    /** Videos only: a still frame for the top of the card. */
+    val posterUrl: String? = null,
     val transcript: String? = null,
     val error: String? = null,
     val source: String? = null,

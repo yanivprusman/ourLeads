@@ -8,6 +8,8 @@ export interface Msg {
   content: string;
   mediaType: string;
   mediaUrl: string | null;
+  /** Videos only: a still frame for the top of the card. */
+  posterUrl?: string | null;
   transcript: string | null;
   error: string | null;
   /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */

@@ -2,10 +2,15 @@ import "server-only";
 import { CUSTOMER, SOURCES, users } from "./config";
 import { STATUSES, STATUS_LABELS, customerDue, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
 import { mediaSig } from "./auth";
+import { posterName } from "./poster";
 import { partnership } from "./partnership";
 import { describeProposal, readProposal } from "./proposal";
 
 /** The board as both clients read it: one payload, small enough to send whole. */
+
+function mediaUrl(file: string): string {
+  return `/api/media/${encodeURIComponent(file)}?sig=${mediaSig(file)}`;
+}
 
 export function messageView(m: MessageRow) {
   return {
@@ -17,7 +22,9 @@ export function messageView(m: MessageRow) {
     sentAt: m.sent_at,
     content: m.content,
     mediaType: m.media_type,
-    mediaUrl: m.media_file ? `/api/media/${encodeURIComponent(m.media_file)}?sig=${mediaSig(m.media_file)}` : null,
+    mediaUrl: m.media_file ? mediaUrl(m.media_file) : null,
+    /** Videos only: a still frame for the top of the card (lib/poster.ts). */
+    posterUrl: m.media_type === "video" && m.media_file ? mediaUrl(posterName(m.media_file)) : null,
     transcript: m.transcript,
     error: m.error,
     /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */

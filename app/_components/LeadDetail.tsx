@@ -64,6 +64,11 @@ export default function LeadDetail({
   const partner = source?.actor ?? "שותף";
   const place = [lead.address, lead.city].filter(Boolean).join(", ");
   const photos = lead.messages.filter((m) => m.mediaType === "image" && m.mediaUrl).map((m) => m.mediaUrl!);
+  // A lead that came as a video shows it at the top too, not only down in the history.
+  const videos = lead.messages.filter((m) => m.mediaType === "video" && m.mediaUrl);
+  const hero = photos.length + videos.length > 0;
+  // The title lies over the photos, but never over a video — it would cover the player's controls.
+  const overlay = hero && videos.length === 0;
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
 
   // Opening a lead touches it ("נגיעה אחרונה קודם" on the board). Fire and forget: a lost mark only misorders the list.
@@ -135,8 +140,20 @@ export default function LeadDetail({
       >
         {/* Hero: the place, as Dudu photographed it. */}
         <div className="relative band text-white">
-          {photos.length > 0 && (
+          {hero && (
             <div className="flex gap-1 overflow-x-auto no-scrollbar snap-x h-56">
+              {videos.map((m) => (
+                <video
+                  key={m.id}
+                  data-id="lead-video"
+                  src={m.mediaUrl!}
+                  poster={m.posterUrl ?? undefined}
+                  controls
+                  playsInline
+                  preload="none"
+                  className="snap-start shrink-0 h-full w-auto max-w-full bg-black"
+                />
+              ))}
               {photos.map((src) => (
                 <button
                   key={src}
@@ -150,7 +167,7 @@ export default function LeadDetail({
               ))}
             </div>
           )}
-          <div className={`${photos.length ? "absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0b2236] via-[#0b2236]/80 to-transparent pt-16" : "pt-14"} px-5 pb-4`}>
+          <div className={`${overlay ? "absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0b2236] via-[#0b2236]/80 to-transparent pt-16" : hero ? "pt-3" : "pt-14"} px-5 pb-4`}>
             <div className="flex items-center gap-2 text-xs text-white/80">
               <span className={`size-5 rounded-full grid place-items-center text-[11px] font-bold ${PARTNER_TONE[lead.source]?.chip}`}>
                 {PARTNER_TONE[lead.source]?.initial}

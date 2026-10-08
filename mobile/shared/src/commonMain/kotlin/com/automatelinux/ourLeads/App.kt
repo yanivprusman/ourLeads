@@ -567,6 +567,9 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     val partner = src?.actor ?: "שותף"
     val place = listOfNotNull(l.address, l.city).joinToString(", ")
     val photos = l.messages.filter { it.mediaType == "image" && it.mediaUrl != null }.map { it.mediaUrl!! }
+    // A lead that came as a video shows it at the top too, not only down in the history. Tapping plays it.
+    val videos = l.messages.filter { it.mediaType == "video" && it.mediaUrl != null && it.posterUrl != null }
+    val hero = photos.size + videos.size
     val label = { id: String -> d.statuses.firstOrNull { it.id == id }?.label ?: id }
 
     fun change(status: String?) {
@@ -595,18 +598,28 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 48.dp)) {
             item {
                 Box(Modifier.fillMaxWidth().background(Band)) {
-                    if (photos.isNotEmpty()) {
+                    if (hero > 0) {
+                        val w = if (hero == 1) Modifier.fillParentMaxWidth() else Modifier.width(220.dp)
                         LazyRow(Modifier.height(260.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            items(videos) { v ->
+                                Box(Modifier.fillParentMaxHeight().then(w).clickable { uri.openUri(api.base + v.mediaUrl!!) }) {
+                                    RemoteImage(v.posterUrl!!, Modifier.fillMaxSize())
+                                    Box(
+                                        Modifier.align(Alignment.Center).padding(bottom = 40.dp).size(56.dp).clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = .5f)),
+                                        contentAlignment = Alignment.Center,
+                                    ) { Icon(Icons.Default.PlayArrow, "צפייה בסרטון", tint = Color.White, modifier = Modifier.size(34.dp)) }
+                                }
+                            }
                             itemsIndexed(photos) { i, p ->
-                                val w = if (photos.size == 1) Modifier.fillParentMaxWidth() else Modifier.width(220.dp)
                                 RemoteImage(p, Modifier.fillParentMaxHeight().then(w).clickable { photo = i })
                             }
                         }
                     }
                     Column(
                         Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                            .then(if (photos.isNotEmpty()) Modifier.background(Brush.verticalGradient(listOf(Color.Transparent, Deep.copy(alpha = .85f), Deep))) else Modifier.statusBarsPadding())
-                            .padding(start = 20.dp, end = 20.dp, top = if (photos.isNotEmpty()) 60.dp else 64.dp, bottom = 18.dp),
+                            .then(if (hero > 0) Modifier.background(Brush.verticalGradient(listOf(Color.Transparent, Deep.copy(alpha = .85f), Deep))) else Modifier.statusBarsPadding())
+                            .padding(start = 20.dp, end = 20.dp, top = if (hero > 0) 60.dp else 64.dp, bottom = 18.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(20.dp).clip(CircleShape).background(partnerColor(l.source)), contentAlignment = Alignment.Center) {

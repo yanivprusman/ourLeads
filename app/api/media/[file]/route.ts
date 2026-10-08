@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { isMediaSig } from "@/lib/auth";
 import { dataDir } from "@/lib/config";
+import { ensurePoster, videoOfPoster } from "@/lib/poster";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +23,17 @@ export async function GET(request: Request, ctx: RouteContext<"/api/media/[file]
   const file = path.basename(decodeURIComponent((await ctx.params).file));
   const sig = new URL(request.url).searchParams.get("sig") ?? "";
   if (!isMediaSig(file, sig)) return new Response("forbidden", { status: 403 });
+  const dir = path.join(dataDir(), "media");
+  const video = videoOfPoster(file);
+  if (video) {
+    try {
+      await ensurePoster(dir, video);
+    } catch (e) {
+      return new Response(`poster failed: ${e instanceof Error ? e.message : e}`, { status: 500 });
+    }
+  }
   try {
-    const bytes = await readFile(path.join(dataDir(), "media", file));
+    const bytes = await readFile(path.join(dir, file));
     return new Response(bytes, {
       headers: {
         "Content-Type": TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream",
