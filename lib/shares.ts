@@ -160,7 +160,7 @@ export function leadCard(leadId: number, hidden: Hideable[]) {
     .all(lead.id) as unknown as MessageRow[];
   const events = hide.has("history")
     ? []
-    : (d.prepare("SELECT * FROM events WHERE lead_id = ? AND kind != 'share' ORDER BY at ASC, id ASC").all(lead.id) as unknown as EventRow[]);
+    : (d.prepare("SELECT * FROM events WHERE lead_id = ? AND kind != 'share' AND deleted_at IS NULL ORDER BY at ASC, id ASC").all(lead.id) as unknown as EventRow[]);
   const source = SOURCES.find((s) => s.id === lead.source);
   const views = msgs.map(messageView);
   return {

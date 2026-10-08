@@ -56,12 +56,14 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
     lastMessageAt: l.last_message_at,
     messages: msgs.map(messageView),
     events: events.map((e) => ({
+      id: e.id,
       at: e.at,
       who: e.who,
       kind: e.kind,
       text: e.text,
       from: e.from_status ? statusLabel(e.from_status) : null,
       to: e.to_status ? statusLabel(e.to_status) : null,
+      editedBy: e.edited_by,
     })),
   };
 }
@@ -80,7 +82,7 @@ export function board(me: { id: string; name: string }) {
     )
     .all() as unknown as LeadRow[];
   const msgs = d.prepare("SELECT * FROM messages ORDER BY sent_at ASC").all() as unknown as MessageRow[];
-  const events = d.prepare("SELECT * FROM events ORDER BY at ASC, id ASC").all() as unknown as EventRow[];
+  const events = d.prepare("SELECT * FROM events WHERE deleted_at IS NULL ORDER BY at ASC, id ASC").all() as unknown as EventRow[];
   const byLead = new Map<number, MessageRow[]>();
   const unassigned: MessageRow[] = [];
   let pending = 0;

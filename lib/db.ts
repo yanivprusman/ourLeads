@@ -181,6 +181,12 @@ export function getDb(): DatabaseSync {
   // sent_texts, later: the WhatsApp id of each sent message (so it can be deleted for
   // everyone), the send it belongs to (a report is two messages, deleted together),
   // and when it was deleted.
+  // events, later: a history line can be corrected or taken out by hand. Neither
+  // erases it — the board is shared by two partners, so a removed line stays in
+  // the table with who removed it, and an edited one says who changed it.
+  const evCols = new Set((db.prepare("PRAGMA table_info(events)").all() as { name: string }[]).map((c) => c.name));
+  for (const name of ["edited_at", "edited_by", "deleted_at", "deleted_by"])
+    if (!evCols.has(name)) db.exec(`ALTER TABLE events ADD COLUMN ${name} TEXT`);
   const sentCols = new Set((db.prepare("PRAGMA table_info(sent_texts)").all() as { name: string }[]).map((c) => c.name));
   for (const name of ["message_id", "batch", "target", "deleted_at"])
     if (!sentCols.has(name)) db.exec(`ALTER TABLE sent_texts ADD COLUMN ${name} TEXT`);
@@ -271,6 +277,22 @@ export interface EventRow {
   text: string | null;
   from_status: string | null;
   to_status: string | null;
+  edited_at: string | null;
+  edited_by: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+}
+
+/** Correct a history line's text. Returns false for no such (live) line. */
+export function editEvent(id: number, text: string, who: string): boolean {
+  return (
+    getDb().prepare("UPDATE events SET text = ?, edited_at = ?, edited_by = ? WHERE id = ? AND deleted_at IS NULL").run(text, now(), who, id).changes > 0
+  );
+}
+
+/** Take a history line off the lead (kept in the table, marked with who and when). */
+export function deleteEvent(id: number, who: string): boolean {
+  return getDb().prepare("UPDATE events SET deleted_at = ?, deleted_by = ? WHERE id = ? AND deleted_at IS NULL").run(now(), who, id).changes > 0;
 }
 
 export function addEvent(

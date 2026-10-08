@@ -352,11 +352,11 @@ export default function LeadDetail({
 
           <h3 className="text-[13px] font-bold text-ink-2 pt-2">מה קרה עד עכשיו</h3>
           <ol className="relative space-y-3 before:absolute before:inset-y-2 before:start-[15px] before:w-px before:bg-line">
-            {timeline.map((it, i) =>
+            {timeline.map((it) =>
               it.kind === "msg" ? (
                 <MessageRow key={`m${it.m.id}`} m={it.m} partner={partner} />
               ) : (
-                <EventRow key={`e${i}`} e={it.e} />
+                <EventRow key={`e${it.e.id}`} e={it.e} onChanged={onChanged} />
               ),
             )}
           </ol>
@@ -500,12 +500,75 @@ function MessageRow({ m, partner }: { m: Msg; partner: string }) {
   );
 }
 
-function EventRow({ e }: { e: LeadEvent }) {
+/**
+ * One history line. Hovering shows edit and delete: a line can be corrected or
+ * taken off (delete takes a second tap). The server keeps a removed line, with
+ * who removed it, and marks an edited one — two partners share this history.
+ */
+function EventRow({ e, onChanged }: { e: LeadEvent; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(e.text ?? "");
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function call(method: "PATCH" | "DELETE", body?: object) {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/events/${e.id}`, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    setBusy(false);
+    if (!res.ok) return setError((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
+    setEditing(false);
+    onChanged();
+  }
+
+  function remove() {
+    if (!armed) {
+      setArmed(true);
+      setTimeout(() => setArmed(false), 4000);
+      return;
+    }
+    setArmed(false);
+    void call("DELETE");
+  }
+
   return (
-    <li className="relative ps-10 text-sm">
+    <li className="group relative ps-10 text-sm">
       <span className="absolute start-[9px] top-1.5 size-3.5 rounded-full bg-harbour border-2 border-paper" />
-      <div className="text-[11px] text-muted">
-        {when(e.at)} · {e.who}
+      <div className="flex items-center gap-2 text-[11px] text-muted">
+        <span>
+          {when(e.at)} · {e.who}
+          {e.editedBy && ` · נערך ע״י ${e.editedBy}`}
+        </span>
+        {!editing && (
+          <span className={`ms-auto flex gap-1 transition ${armed ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}>
+            <button
+              data-id="event-edit"
+              disabled={busy}
+              onClick={() => {
+                setText(e.text ?? "");
+                setEditing(true);
+              }}
+              className="rounded-full px-2 py-0.5 border border-line bg-white hover:border-harbour-2 hover:text-ink cursor-pointer transition disabled:opacity-50"
+            >
+              ערוך
+            </button>
+            <button
+              data-id="event-delete"
+              disabled={busy}
+              onClick={remove}
+              className={`rounded-full px-2 py-0.5 border cursor-pointer transition disabled:opacity-50 ${
+                armed ? "bg-[#b91c1c] border-[#b91c1c] text-white" : "border-line bg-white hover:text-[#b91c1c] hover:border-[#fca5a5]"
+              }`}
+            >
+              {armed ? "לחצו שוב למחיקה" : "מחק"}
+            </button>
+          </span>
+        )}
       </div>
       {e.to && (
         <p className="mt-0.5">
@@ -513,7 +576,42 @@ function EventRow({ e }: { e: LeadEvent }) {
           <b>{e.to}</b>
         </p>
       )}
-      {e.text && <p className="text-ink-2 mt-0.5 leading-relaxed">{e.text}</p>}
+      {editing ? (
+        <div className="mt-1 space-y-1.5">
+          <textarea
+            data-id="event-edit-text"
+            autoFocus
+            value={text}
+            onChange={(ev) => setText(ev.target.value)}
+            onKeyDown={(ev) => {
+              if (ev.key === "Escape") setEditing(false);
+              if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey) && text.trim()) void call("PATCH", { text });
+            }}
+            rows={Math.min(6, Math.max(2, Math.ceil(text.length / 60)))}
+            className="w-full rounded-xl border border-line px-3 py-2 bg-white outline-none focus:border-harbour-2 focus:ring-4 focus:ring-harbour-2/10 transition"
+          />
+          <div className="flex gap-2">
+            <button
+              data-id="event-edit-save"
+              disabled={busy || !text.trim()}
+              onClick={() => call("PATCH", { text })}
+              className="rounded-lg px-3 py-1 bg-harbour text-white font-semibold hover:bg-harbour-2 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              שמור
+            </button>
+            <button
+              data-id="event-edit-cancel"
+              onClick={() => setEditing(false)}
+              className="rounded-lg px-3 py-1 border border-line bg-white hover:border-harbour-2 cursor-pointer transition"
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      ) : (
+        e.text && <p className="text-ink-2 mt-0.5 leading-relaxed">{e.text}</p>
+      )}
+      {error && <p className="text-red-700 text-xs mt-1">{error}</p>}
     </li>
   );
 }

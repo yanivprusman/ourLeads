@@ -14,12 +14,15 @@ export interface Msg {
 }
 
 export interface LeadEvent {
+  id: number;
   at: string;
   who: string;
   kind: string;
   text: string | null;
   from: string | null;
   to: string | null;
+  /** Who last corrected this line by hand, or null. */
+  editedBy: string | null;
 }
 
 export interface Lead {
