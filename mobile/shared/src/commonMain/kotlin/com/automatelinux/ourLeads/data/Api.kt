@@ -140,18 +140,19 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
-    /** The report of every open lead, exactly as it would be sent — one string per WhatsApp message. */
-    suspend fun report(): Result<List<String>> {
-        val r = httpRequest("GET", "$base/api/report", token, null, null)
+    /** The report exactly as it would be sent — [ids] narrows it to those leads, null = every open lead. */
+    suspend fun report(ids: List<Int>? = null): Result<ReportText> {
+        val r = httpRequest("GET", "$base/api/report" + (ids?.let { "?ids=${it.joinToString(",")}" } ?: ""), token, null, null)
         if (r.code != 200) return Result.Err(describe(r))
-        return runCatching { Result.Ok(json.decodeFromString(ReportText.serializer(), r.text).parts) }
+        return runCatching { Result.Ok(json.decodeFromString(ReportText.serializer(), r.text)) }
             .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
     }
 
-    /** Send the report of every open lead to [to] ("preview" or "dudu"). */
-    suspend fun sendReport(to: String): Result<Unit> {
-        val body = JsonObject(mapOf("to" to JsonPrimitive(to))).toString().encodeToByteArray()
-        val r = httpRequest("POST", "$base/api/report", token, body, "application/json; charset=utf-8")
+    /** Send the report to [to] ("preview" or "dudu") — only [ids], or every open lead when null. */
+    suspend fun sendReport(to: String, ids: List<Int>? = null): Result<Unit> {
+        val fields = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("to" to JsonPrimitive(to))
+        ids?.let { fields["ids"] = kotlinx.serialization.json.JsonArray(it.map { id -> JsonPrimitive(id) }) }
+        val r = httpRequest("POST", "$base/api/report", token, JsonObject(fields).toString().encodeToByteArray(), "application/json; charset=utf-8")
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 

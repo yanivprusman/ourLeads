@@ -128,4 +128,7 @@ data class SentList(val sends: List<SentBatch>)
 data class ClearResult(val deleted: Int, val failed: List<String> = emptyList())
 
 @Serializable
-data class ReportText(val parts: List<String>, val leadIds: List<Int> = emptyList())
+data class ReportChoice(val id: Int, val title: String, val group: String)
+
+@Serializable
+data class ReportText(val parts: List<String>, val leadIds: List<Int> = emptyList(), val choices: List<ReportChoice> = emptyList())

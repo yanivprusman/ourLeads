@@ -968,30 +968,68 @@ private fun SendTextButtons(what: String, resetKey: String = "", send: suspend (
 private fun ReportDialog(onDismiss: () -> Unit) {
     val api = LocalApi.current
     var parts by remember { mutableStateOf<List<String>?>(null) }
+    var choices by remember { mutableStateOf(listOf<ReportChoice>()) }
+    // null = every open lead.
+    var picked by remember { mutableStateOf<Set<Int>?>(null) }
+    var picking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var version by remember { mutableStateOf(0) }
-    LaunchedEffect(version) {
-        when (val r = api.report()) {
-            is Result.Ok -> parts = r.value
+    val ids = picked?.sorted()
+    val none = picked?.isEmpty() == true
+    LaunchedEffect(version, ids) {
+        if (none) return@LaunchedEffect
+        when (val r = api.report(ids)) {
+            is Result.Ok -> { parts = r.value.parts; choices = r.value.choices; error = null }
             is Result.Err -> error = r.message
         }
+    }
+    fun toggle(id: Int) {
+        val next = (picked ?: choices.map { it.id }.toSet()).let { if (id in it) it - id else it + id }
+        picked = if (next.size == choices.size) null else next
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
-        title = { T("דוח כל הלידים", 18, FontWeight.Bold) },
+        title = { T("דוח לידים", 18, FontWeight.Bold) },
         text = {
             Column {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp, Line, RoundedCornerShape(12.dp)).clickable { picking = !picking }.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    T("לידים בדוח: ${picked?.size ?: choices.size} מתוך ${choices.size}", 14, FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    T(if (picking) "▲" else "בחירה ▼", 13, color = Muted)
+                }
+                if (picking) Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()).padding(top = 4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                        T("הכל", 13, modifier = Modifier.clip(CircleShape).border(1.dp, Line, CircleShape).clickable { picked = null }.padding(horizontal = 12.dp, vertical = 5.dp))
+                        T("אף אחד", 13, modifier = Modifier.clip(CircleShape).border(1.dp, Line, CircleShape).clickable { picked = emptySet() }.padding(horizontal = 12.dp, vertical = 5.dp))
+                    }
+                    choices.map { it.group }.distinct().forEach { g ->
+                        T(g, 11, FontWeight.Bold, Muted, Modifier.padding(top = 6.dp))
+                        choices.filter { it.group == g }.forEach { c ->
+                            Row(Modifier.fillMaxWidth().clickable { toggle(c.id) }, verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(picked?.contains(c.id) ?: true, onCheckedChange = null, colors = CheckboxDefaults.colors(checkedColor = Harbour))
+                                Spacer(Modifier.width(4.dp))
+                                T(c.title, 14, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                    if (parts == null && error == null) T("טוען…", 13, color = Muted)
-                    parts?.forEach { p ->
-                        T(p, 13, modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFE7F6E9)).padding(10.dp))
+                    if (none) T("לא נבחרו לידים.", 13, color = Muted)
+                    else {
+                        if (parts == null && error == null) T("טוען…", 13, color = Muted)
+                        parts?.forEach { p ->
+                            T(p, 13, modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFE7F6E9)).padding(10.dp))
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 error?.let { T(it, 13, color = Danger) }
-                if (parts != null) SendTextButtons("הדוח") { to ->
-                    when (val r = api.sendReport(to)) {
+                if (parts != null && !none && error == null) SendTextButtons("הדוח", resetKey = ids?.joinToString(",") ?: "") { to ->
+                    when (val r = api.sendReport(to, ids)) {
                         is Result.Ok -> { version++; null }
                         is Result.Err -> r.message
                     }
