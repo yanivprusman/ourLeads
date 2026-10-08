@@ -6,6 +6,7 @@ import { askJson } from "./claude";
 import { cleanDate, cleanDateTime, describeCalendar, describeDeal, sayWhen, todayLine } from "./deal";
 import { transcribe } from "./transcribe";
 import { claimCardLink } from "./shares";
+import { claimCardText } from "./cardText";
 import { classifyPhotos } from "./photoPhones";
 import {
   STATUSES,
@@ -93,7 +94,9 @@ async function pull(): Promise<void> {
     added++;
     // A lead card sent into the chat is filed on its lead here, before the extractor
     // could read the customer's details in it as a new lead.
-    const leadId = claimCardLink({ id: m.id, chat_jid: m.chatJid, content: m.content, from_me: m.fromMe, sent_at: sentAt }, src.actor);
+    // Same for a card sent as text (lib/cardText.ts) and forwarded here from the preview group.
+    const msg = { id: m.id, chat_jid: m.chatJid, content: m.content, from_me: m.fromMe, sent_at: sentAt };
+    const leadId = claimCardLink(msg, src.actor) ?? claimCardText(msg, src.actor, src.actor);
     if (leadId) log(`card for lead #${leadId} sent in ${src.id}`);
   }
   if (added) log(`read ${added} new message(s)`);

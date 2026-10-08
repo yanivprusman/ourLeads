@@ -4,9 +4,10 @@ import path from "node:path";
 import { bridge } from "./config";
 
 /**
- * Read-only access to the WhatsApp bridge on the leader. All reads go through
- * its authenticated endpoints — never a second whatsmeow session (one account
+ * Access to the WhatsApp bridge on the leader. All calls go through its
+ * authenticated endpoints — never a second whatsmeow session (one account
  * allows exactly one linked client; a second one kicks the first off forever).
+ * The only send is `sendText`, to `REPORT_CHAT` — see lib/config.ts.
  */
 
 async function call(pathname: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -106,4 +107,19 @@ export async function downloadMedia(
   const name = `${messageId.replace(/[^A-Za-z0-9_-]/g, "")}${ext}`;
   await writeFile(path.join(dir, name), bytes);
   return name;
+}
+
+/** Send a plain text message from Yaniv's own number. */
+export async function sendText(jid: string, message: string): Promise<void> {
+  const res = await call(
+    "/send",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient: jid, message }),
+    },
+    30_000,
+  );
+  const json = (await res.json()) as { success: boolean; message?: string };
+  if (!json.success) throw new Error(`bridge send failed: ${json.message ?? "unknown error"}`);
 }

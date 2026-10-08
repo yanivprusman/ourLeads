@@ -146,9 +146,14 @@ export function cardView(token: string) {
   const share = getShare(token);
   if (!share) return null;
   if (share.revoked_at) return { revoked: true as const };
-  const lead = getLead(share.lead_id);
+  return leadCard(share.lead_id, JSON.parse(share.hide) as Hideable[]);
+}
+
+/** The card as anyone outside the board sees it — a link's page or the text sent to WhatsApp. Null for no such lead. */
+export function leadCard(leadId: number, hidden: Hideable[]) {
+  const lead = getLead(leadId);
   if (!lead) return null;
-  const hide = new Set(JSON.parse(share.hide) as Hideable[]);
+  const hide = new Set(effectiveHide(hidden));
   const d = getDb();
   const msgs = d
     .prepare("SELECT * FROM messages WHERE lead_id = ? ORDER BY sent_at ASC")
@@ -173,6 +178,8 @@ export function cardView(token: string) {
     nextStep: scrub(lead.next_step, hide),
     status: lead.status,
     statusLabel: STATUS_LABELS[lead.status],
+    holder: lead.holder,
+    checkBackAt: lead.check_back_at,
     meetingAt: lead.meeting_at,
     workStart: lead.work_start,
     workEnd: lead.work_end,
@@ -224,3 +231,4 @@ export function cardView(token: string) {
 }
 
 export type CardView = NonNullable<ReturnType<typeof cardView>>;
+export type LeadCard = NonNullable<ReturnType<typeof leadCard>>;

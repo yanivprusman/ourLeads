@@ -36,6 +36,7 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
   const [error, setError] = useState<string | null>(null);
   const [made, setMade] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [shares, setShares] = useState<Share[]>([]);
   const historyForced = FORCES_HISTORY.some((f) => hide.has(f));
   const effective = new Set<Field>(historyForced ? [...hide, "history"] : hide);
@@ -58,6 +59,7 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
 
   const toggle = (f: Field) => {
     setMade(null);
+    setSentTo(null);
     setHide((s) => {
       const n = new Set(s);
       if (n.has(f)) n.delete(f);
@@ -80,6 +82,22 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
     setMade(body.url);
     setCopied(false);
     load();
+    onChanged();
+  }
+
+  /** The card as plain text in the preview group — for a reader who does not open links. */
+  async function sendText() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/leads/${lead.id}/send-text`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hide: [...effective] }),
+    });
+    setBusy(false);
+    const body = await res.json();
+    if (!res.ok) return setError(body.error ?? `HTTP ${res.status}`);
+    setSentTo(body.to);
     onChanged();
   }
 
@@ -185,6 +203,15 @@ export default function ShareCard({ lead, onClose, onChanged }: { lead: Lead; on
             </div>
           </div>
         )}
+        <button
+          data-id="share-send-text"
+          disabled={busy || !!sentTo}
+          onClick={sendText}
+          className="w-full rounded-2xl py-3 bg-israel text-white font-semibold hover:opacity-90 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {sentTo ? `נשלח כטקסט ל${sentTo} ✓` : "שלח כטקסט לקבוצה ריקה"}
+        </button>
+        <p className="text-xs text-muted -mt-2">הפרטים עצמם בתוך ההודעה, בלי קישור — לקריאה ישר בוואטסאפ ולהעברה הלאה.</p>
         {error && <p className="text-red-700 text-sm">{error}</p>}
 
         {shares.length > 0 && (

@@ -129,6 +129,19 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
             .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
     }
 
+    /**
+     * Send this lead's card as plain WhatsApp text to the preview group, leaving out
+     * what [hide] names. Returns the group's name.
+     */
+    suspend fun sendCardText(leadId: Int, hide: List<String>): Result<String> {
+        val body = JsonObject(mapOf("hide" to kotlinx.serialization.json.JsonArray(hide.map { JsonPrimitive(it) })))
+            .toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/leads/$leadId/send-text", token, body, "application/json; charset=utf-8")
+        if (r.code != 200) return Result.Err(describe(r))
+        return runCatching { Result.Ok(json.decodeFromString(SentTo.serializer(), r.text).to) }
+            .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
+    }
+
     /** Add photos straight to a lead (JPEG bytes each). */
     suspend fun addPhotos(leadId: Int, photos: List<ByteArray>): Result<Unit> {
         val boundary = "----ourleadsphotos${photos.sumOf { it.size }}x${photos.size}"

@@ -114,3 +114,6 @@ data class ErrorBody(val error: String? = null)
 
 @Serializable
 data class ShareLink(val token: String, val url: String)
+
+@Serializable
+data class SentTo(val to: String)
