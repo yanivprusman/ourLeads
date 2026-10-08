@@ -32,14 +32,8 @@ const MARK_IN_TEXT = /ourLeads · (?:ליד #(\d+)|דוח לידים)/;
 const LINE_MAX = 280;
 /** The newest history lines kept; the rest is on the board. */
 const HISTORY_MAX = 12;
-/** A lead's details in the report — the report is a list to scan, the card has the rest. */
-const REPORT_DETAILS_MAX = 220;
-/**
- * The report is split into messages of at most this many characters, at lead
- * boundaries. WhatsApp takes 65k, but folds a long one behind "קרא עוד" and a
- * wall of text is hard to answer about; a few screens per message is readable.
- */
-const PART_MAX = 5000;
+/** WhatsApp's own limit on one text message; the details message is refused above it, never cut. */
+const WHATSAPP_MAX = 65_000;
 
 const clip = (t: string, max = LINE_MAX) => (t.length > max ? `${t.slice(0, max - 1)}…` : t);
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -123,8 +117,9 @@ function reportLeads(): LeadRow[] {
 
 /**
  * The report: every open lead, grouped by whose move it is — each partner, then
- * the customer (those due today first), then nobody yet — split into messages of
- * at most `PART_MAX` characters at lead boundaries. Returns the messages and the
+ * the customer (those due today first), then nobody yet — as two messages:
+ * first the details of every lead, then the summary (last, so it is what the
+ * chat shows). Both number the leads the same way. Returns the messages and the
  * leads in them.
  */
 export function reportText(): { parts: string[]; leadIds: number[] } {
@@ -140,51 +135,38 @@ export function reportText(): { parts: string[]; leadIds: number[] } {
     { title: "עוד לא אצל אף אחד", leads: leads.filter((l) => !l.holder || (l.holder !== CUSTOMER.id && !users().some((u) => u.id === l.holder))) },
   ].filter((g) => g.leads.length);
 
-  const today = israelToday();
-  const [, m, d] = today.split("-").map(Number);
-  const summary = groups.map((g) => `${g.title} ${g.leads.length}`).join(" · ");
+  const [, m, d] = israelToday().split("-").map(Number);
+  const day = `${d}.${m}`;
+  const counts = groups.map((g) => `${g.title} ${g.leads.length}`).join(" · ");
+  const waiting = (l: LeadRow) => (l.holder === CUSTOMER.id && l.check_back_at ? `⏳ ${customerDue(l) ? "הגיע הזמן לחזור אליו" : "חוזרים אליו"} ב${sayWhen(l.check_back_at)}` : null);
 
-  // Blocks: one per group header and one per lead, so a split never cuts a lead in half.
-  const blocks: string[] = [];
+  const details: string[] = [`*דוח לידים — ${day} · פירוט*`];
+  const summary: string[] = [`*דוח לידים — ${day} · סיכום*`, `${leads.length} פתוחים: ${counts}`];
   let n = 0;
   for (const g of groups) {
-    blocks.push(`━━ *${g.title}* (${g.leads.length}) ━━`);
+    details.push(`━━ *${g.title}* (${g.leads.length}) ━━`);
+    summary.push(`*${g.title}* (${g.leads.length})`);
+    const rows: string[] = [];
     for (const l of g.leads) {
       const c = leadCard(l.id, [])!;
-      const lines = [`*${++n}. ${c.title}*`, [c.sourceLabel, c.status === "none" ? null : c.statusLabel, c.trade].filter(Boolean).join(" · ")];
-      if (l.holder === CUSTOMER.id && l.check_back_at)
-        lines.push(`⏳ ${customerDue(l) ? "הגיע הזמן לחזור אליו" : "חוזרים אליו"} ב${sayWhen(l.check_back_at)}`);
+      n++;
+      const lines = [`*${n}. ${c.title}*`, [c.sourceLabel, c.status === "none" ? null : c.statusLabel, c.trade].filter(Boolean).join(" · ")];
+      const w = waiting(l);
+      if (w) lines.push(w);
       lines.push(...facts(c));
-      if (c.details) lines.push(`📝 ${clip(c.details, REPORT_DETAILS_MAX)}`);
+      if (c.details) lines.push(`📝 ${c.details}`);
       if (c.nextStep) lines.push(`➡️ ${c.nextStep}`);
-      blocks.push(lines.join("\n"));
+      details.push(lines.join("\n"));
+      rows.push(`${n}. ${c.title}${l.holder === CUSTOMER.id && l.check_back_at ? ` — ${customerDue(l) ? "⏳ לחזור אליו" : `עד ${sayWhen(l.check_back_at)}`}` : ""}`);
     }
+    summary.push(rows.join("\n"));
   }
+  if (!leads.length) summary.push("אין לידים פתוחים.");
 
-  const parts: string[] = [];
-  let cur: string[] = [];
-  let len = 0;
-  for (const b of blocks) {
-    if (cur.length && len + b.length > PART_MAX) {
-      parts.push(cur.join("\n\n"));
-      cur = [];
-      len = 0;
-    }
-    cur.push(b);
-    len += b.length + 2;
-  }
-  if (cur.length) parts.push(cur.join("\n\n"));
-  if (!parts.length) parts.push("אין לידים פתוחים.");
-
-  const total = parts.length;
-  return {
-    parts: parts.map((p, i) => {
-      const head = i === 0 ? `*דוח לידים — ${d}.${m}*\n${leads.length} פתוחים: ${summary}\n\n` : "";
-      const of = total > 1 ? ` · ${i + 1}/${total}` : "";
-      return `${head}${p}\n\n_${REPORT_MARK} ${d}.${m}${of}_`;
-    }),
-    leadIds: leads.map((l) => l.id),
-  };
+  const parts = [...(leads.length ? [details.join("\n\n")] : []), summary.join("\n\n")].map((p) => `${p}\n\n_${REPORT_MARK} ${day}_`);
+  const long = parts.find((p) => p.length > WHATSAPP_MAX);
+  if (long) throw new Error(`הדוח ארוך מדי להודעת וואטסאפ אחת (${long.length} תווים, המקסימום ${WHATSAPP_MAX})`);
+  return { parts, leadIds: leads.map((l) => l.id) };
 }
 
 async function send(target: TextTarget, text: string, kind: "card" | "report", leadIds: number[], who: string): Promise<void> {
