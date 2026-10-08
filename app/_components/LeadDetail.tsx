@@ -20,6 +20,7 @@ import {
   type Lead,
   type LeadEvent,
   type Msg,
+  type Proposal,
 } from "./types";
 
 type Item = { at: string; kind: "msg"; m: Msg } | { at: string; kind: "event"; e: LeadEvent };
@@ -106,6 +107,18 @@ export default function LeadDetail({
     if (!res.ok) return setError((await res.json()).error ?? `HTTP ${res.status}`);
     onChanged();
   }
+  async function resolveProposal(accept: boolean) {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/leads/${lead.id}/proposal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accept }),
+    });
+    setBusy(false);
+    if (!res.ok) return setError((await res.json()).error ?? `HTTP ${res.status}`);
+    onChanged();
+  }
   const setStatus = (s: string) => s !== lead.status && !busy && patch({ status: s, note: note.trim() || undefined });
 
   // One story: what was said on WhatsApp and what was done about it, in the order the viewer chose.
@@ -187,6 +200,7 @@ export default function LeadDetail({
         </div>
 
         <section className="px-4 -mt-0 pt-4 space-y-4">
+          {lead.proposal && <ProposalCard p={lead.proposal} busy={busy} onResolve={resolveProposal} />}
           {/* The three things you do with a lead. */}
           <div className="grid grid-cols-3 gap-2">
             <Action
@@ -402,7 +416,7 @@ export default function LeadDetail({
           <ol className="relative space-y-3 before:absolute before:inset-y-2 before:start-[15px] before:w-px before:bg-line">
             {timeline.map((it) =>
               it.kind === "msg" ? (
-                <MessageRow key={`m${it.m.id}`} m={it.m} partner={partner} />
+                <MessageRow key={`m${it.m.id}`} m={it.m} partner={partner} customer={lead.customerName ?? "הלקוח"} />
               ) : (
                 <EventRow key={`e${it.e.id}`} e={it.e} onChanged={onChanged} />
               ),
@@ -515,6 +529,37 @@ function EditFact({ id, k, v, busy, onSave }: { id: string; k: string; v: string
   );
 }
 
+/** The customer's chat suggests moving the lead. It moves only when one of us taps אשר. */
+function ProposalCard({ p, busy, onResolve }: { p: Proposal; busy: boolean; onResolve: (accept: boolean) => void }) {
+  return (
+    <div data-id="lead-proposal" className="rounded-2xl border border-amber/40 bg-amber-soft p-4">
+      <div className="text-[11px] font-semibold text-amber mb-1">מהשיחה עם {p.who} · {when(p.at)}</div>
+      <p className="text-sm text-ink-2">{p.why}</p>
+      <p className="mt-2 text-sm font-bold text-ink">
+        להעביר ל: <span className="text-harbour">{p.summary}</span>?
+      </p>
+      <div className="mt-3 flex gap-2">
+        <button
+          data-id="proposal-accept"
+          disabled={busy}
+          onClick={() => onResolve(true)}
+          className="h-10 px-5 rounded-full bg-harbour text-white text-sm font-semibold hover:bg-harbour-2 active:scale-[.98] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          אשר
+        </button>
+        <button
+          data-id="proposal-reject"
+          disabled={busy}
+          onClick={() => onResolve(false)}
+          className="h-10 px-5 rounded-full bg-white border border-line text-ink-2 text-sm font-semibold hover:bg-paper active:scale-[.98] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          לא עכשיו
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Fact({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
   return (
     <div className="flex gap-3 px-4 py-3 text-sm">
@@ -524,13 +569,13 @@ function Fact({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
   );
 }
 
-function MessageRow({ m, partner }: { m: Msg; partner: string }) {
+function MessageRow({ m, partner, customer }: { m: Msg; partner: string; customer: string }) {
   return (
     <li className="relative ps-10">
       <span className={`absolute start-2 top-3 size-4 rounded-full border-2 border-paper ${m.fromMe ? "bg-israel" : "bg-sky"}`} />
       <div className={`rounded-2xl px-3.5 py-2.5 text-sm border ${m.fromMe ? "bg-[#ecf8f3] border-[#cdeee0]" : "bg-white border-line"}`}>
         <div className="text-[11px] text-muted mb-1">
-          {m.fromMe ? "אני" : partner} · {when(m.sentAt)} · וואטסאפ
+          {m.fromMe ? "אני" : m.fromCustomer ? customer : partner} · {when(m.sentAt)} · וואטסאפ
         </div>
         {m.mediaType === "video" && m.mediaUrl && (
           <video data-id="message-video" src={m.mediaUrl} controls preload="metadata" className="rounded-xl max-h-72 w-full bg-black" />

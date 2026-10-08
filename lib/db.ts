@@ -207,6 +207,9 @@ export function getDb(): DatabaseSync {
     ["collected_by", "TEXT"],
     // The day the collector passed the other partner his share. Paid but not settled = owed.
     ["settled_at", "TEXT"],
+    // A change the customer's own chat suggests (lib/proposal.ts) — a status, with its meeting/work
+    // dates or price — waiting for one of us to confirm. JSON, null = nothing waiting.
+    ["proposal", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
   // Whether a photo shows the customer's phone number (lib/photoPhones.ts): none | partial | full, null = not looked at yet.
@@ -292,6 +295,8 @@ export interface LeadRow {
   updated_at: string;
   last_message_at: string | null;
   viewed_at: string | null;
+  /** JSON of a `Proposal` (lib/proposal.ts) waiting for confirmation, or null. */
+  proposal: string | null;
 }
 
 export interface MessageRow {

@@ -21,6 +21,14 @@ write "Israel said" / "ישראל אמר"; the source's `actor` in `lib/config.t
   On the first run, extraction from text alone merged two different customers into one lead.
 - The answer is schema-constrained because free-text JSON broke on `מע"מ`.
 
+## Customers' own chats (2026-10-08)
+`lib/customerChats.ts` also reads every private chat whose number is a phone on a lead — the
+customer's own talk with Yaniv (the bridge's account; Dudu's phone is not visible). Each message
+goes on that lead's history with a note line. **A status never moves from a customer's chat on its
+own**: the status, with the meeting/work dates or price that come with it, is left as a
+`proposal` on the lead (`lib/proposal.ts`) and moves only when one of us taps אשר
+(`POST /api/leads/[id]/proposal {accept}`). Yaniv's rule: the user confirms every status change.
+
 ## Talking to it
 `POST /api/command` takes either multipart `audio` (transcribed here) or JSON `{text}`.
 `lib/command.ts` matches what was said to the open leads and applies status, visit, next step and

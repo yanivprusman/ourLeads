@@ -2,6 +2,8 @@ export interface Msg {
   id: string;
   chatJid: string;
   fromMe: boolean;
+  /** Written by the customer himself, in his own chat. */
+  fromCustomer?: boolean;
   sentAt: string;
   content: string;
   mediaType: string;
@@ -25,6 +27,17 @@ export interface LeadEvent {
   editedBy: string | null;
 }
 
+export interface Proposal {
+  status: string | null;
+  statusLabel: string | null;
+  /** What confirming does, in words: "פגישה · רביעי 14.10 10:00". */
+  summary: string;
+  /** What the customer said, in one sentence. */
+  why: string;
+  who: string;
+  at: string;
+}
+
 export interface Lead {
   id: number;
   source: string;
@@ -37,6 +50,8 @@ export interface Lead {
   details: string | null;
   status: string;
   statusLabel: string;
+  /** A change the customer's own chat suggests; nothing moves until one of us confirms it. */
+  proposal: Proposal | null;
   /** The user id whose move it is ("the ball is in his hands"), "customer" while we wait for him; null = nobody yet. */
   holder: string | null;
   /** holder = "customer" only: the day both of us check back with him ("2026-10-09"). */

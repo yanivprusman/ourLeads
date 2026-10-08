@@ -8,6 +8,7 @@ import { transcribe } from "./transcribe";
 import { claimCardLink } from "./shares";
 import { claimSentText } from "./cardText";
 import { classifyPhotos } from "./photoPhones";
+import { processCustomerChats, pullCustomerChats } from "./customerChats";
 import {
   STATUSES,
   STATUS_LABELS,
@@ -34,12 +35,12 @@ import {
 const POLL_MS = 20_000;
 const QUIET_MS = 120_000;
 const MAX_WAIT_MS = 8 * 60_000;
-const RETRY_MS = 5 * 60_000;
+export const RETRY_MS = 5 * 60_000;
 /** Messages re-read before the newest one we have, so a late-arriving message
  *  with an older timestamp (the bridge was reconnecting) is still caught. */
-const OVERLAP_MS = 30 * 60_000;
+export const OVERLAP_MS = 30 * 60_000;
 
-const OWNER = "יניב";
+export const OWNER = "יניב";
 
 let running = false;
 const backoffUntil = new Map<string, number>();
@@ -58,7 +59,9 @@ export async function tick(): Promise<void> {
   running = true;
   try {
     await pull();
+    await pullCustomerChats(log);
     for (const s of SOURCES) await processSource(s);
+    await processCustomerChats(log);
     await classifyPhotos(log);
   } catch (e) {
     log("tick failed:", (e as Error).message);
@@ -69,7 +72,11 @@ export async function tick(): Promise<void> {
 
 async function pull(): Promise<void> {
   const d = getDb();
-  const latest = (d.prepare("SELECT MAX(sent_at) AS m FROM messages").get() as { m: string | null }).m;
+  // Partner chats only: a customer's chat (lib/customerChats.ts) keeps its own place.
+  const ph = SOURCES.map(() => "?").join(",");
+  const latest = (
+    d.prepare(`SELECT MAX(sent_at) AS m FROM messages WHERE chat_jid IN (${ph})`).get(...SOURCES.map((s) => s.jid)) as { m: string | null }
+  ).m;
   const floor = ingestSince();
   let since = floor;
   if (latest) {
@@ -103,6 +110,19 @@ async function pull(): Promise<void> {
   if (added) log(`read ${added} new message(s)`);
 }
 
+/**
+ * The part of a chat's pending messages that may be read now, or null to wait.
+ * A chat in live conversation is never quiet for two minutes, so waiting for
+ * quiet alone would hold a lead back for as long as the partners keep
+ * talking. After MAX_WAIT_MS, everything older than QUIET_MS goes through.
+ */
+export function readyBatch(pending: MessageRow[]): MessageRow[] | null {
+  const age = (m: MessageRow) => Date.now() - new Date(m.sent_at).getTime();
+  if (age(pending[pending.length - 1]) >= QUIET_MS) return pending;
+  if (age(pending[0]) < MAX_WAIT_MS) return null;
+  return pending.filter((m) => age(m) >= QUIET_MS);
+}
+
 async function processSource(src: Source): Promise<void> {
   if ((backoffUntil.get(src.id) ?? 0) > Date.now()) return;
   const d = getDb();
@@ -110,16 +130,8 @@ async function processSource(src: Source): Promise<void> {
     .prepare("SELECT * FROM messages WHERE source = ? AND state = 'pending' ORDER BY sent_at ASC")
     .all(src.id) as unknown as MessageRow[];
   if (!pending.length) return;
-  const age = (m: MessageRow) => Date.now() - new Date(m.sent_at).getTime();
-  // A chat in live conversation is never quiet for two minutes, so waiting for
-  // quiet alone would hold a lead back for as long as the partners keep
-  // talking. After MAX_WAIT_MS, everything older than QUIET_MS goes through.
-  let batch = pending;
-  if (age(pending[pending.length - 1]) < QUIET_MS) {
-    if (age(pending[0]) < MAX_WAIT_MS) return;
-    batch = pending.filter((m) => age(m) >= QUIET_MS);
-  }
-  const ready = batch;
+  const ready = readyBatch(pending);
+  if (!ready) return;
   // Only Yaniv talking and nothing from the partner: still worth reading — "I'll
   // be there Thursday" is a status — so the batch goes through either way.
   try {
@@ -134,7 +146,7 @@ async function processSource(src: Source): Promise<void> {
 /** Download every pending message's media; transcribe voice notes. A failure
  *  is recorded on the message and does not stop the batch — a lead with one
  *  missing photo is better than no lead. */
-async function prepareMedia(msgs: MessageRow[]): Promise<void> {
+export async function prepareMedia(msgs: MessageRow[]): Promise<void> {
   const d = getDb();
   const dir = path.join(dataDir(), "media");
   for (const m of msgs) {
@@ -160,7 +172,7 @@ async function prepareMedia(msgs: MessageRow[]): Promise<void> {
   }
 }
 
-function israelTime(iso: string): string {
+export function israelTime(iso: string): string {
   return new Date(iso).toLocaleString("he-IL", {
     timeZone: "Asia/Jerusalem",
     day: "2-digit",
@@ -205,7 +217,7 @@ export function describeLeads(): string {
 
 export const STATUS_GUIDE = STATUSES.map((s) => `${s} = ${STATUS_LABELS[s]}`).join(", ");
 
-interface LeadFields {
+export interface LeadFields {
   title?: string;
   trade?: string | null;
   customerName?: string | null;
@@ -232,7 +244,7 @@ interface ExtractAnswer {
   ignore?: string[];
 }
 
-function toPatch(f: LeadFields): LeadPatch {
+export function toPatch(f: LeadFields): LeadPatch {
   const p: LeadPatch = {};
   if (f.title) p.title = f.title;
   if (f.trade !== undefined) p.trade = f.trade;

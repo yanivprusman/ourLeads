@@ -3,6 +3,7 @@ import { CUSTOMER, SOURCES, users } from "./config";
 import { STATUSES, STATUS_LABELS, customerDue, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
 import { mediaSig } from "./auth";
 import { partnership } from "./partnership";
+import { describeProposal, readProposal } from "./proposal";
 
 /** The board as both clients read it: one payload, small enough to send whole. */
 
@@ -11,6 +12,8 @@ export function messageView(m: MessageRow) {
     id: m.id,
     chatJid: m.chat_jid,
     fromMe: !!m.from_me,
+    /** Written by the customer himself, in his own chat (lib/customerChats.ts). */
+    fromCustomer: m.source === "customer" && !m.from_me,
     sentAt: m.sent_at,
     content: m.content,
     mediaType: m.media_type,
@@ -20,6 +23,12 @@ export function messageView(m: MessageRow) {
     /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */
     phoneShown: m.phone_shown,
   };
+}
+
+function proposalView(l: LeadRow) {
+  const p = readProposal(l);
+  if (!p) return null;
+  return { status: p.status, statusLabel: p.status ? STATUS_LABELS[p.status] : null, summary: describeProposal(p), why: p.why, who: p.who, at: p.at };
 }
 
 function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
@@ -35,6 +44,8 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
     details: l.details,
     status: l.status,
     statusLabel: STATUS_LABELS[l.status],
+    /** A change the customer's chat suggests, waiting for one of us to confirm (lib/proposal.ts). */
+    proposal: proposalView(l),
     holder: l.holder,
     /** holder = "customer" only: the day both of us check back with him, and whether it has come. */
     checkBackAt: l.holder === CUSTOMER.id ? l.check_back_at : null,

@@ -407,6 +407,12 @@ function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOp
           </p>
           {l.nextStep && <p className="text-sm text-ink-2 mt-1.5 line-clamp-1">← {l.nextStep}</p>}
           <DealLine lead={l} />
+          {l.proposal && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-soft text-[#8a4a0b] px-2.5 py-1 text-[12px] font-semibold" title={l.proposal.why}>
+              <span className="size-1.5 rounded-full bg-amber" />
+              {l.proposal.who}: להעביר ל{l.proposal.summary}? · מחכה לאישור
+            </p>
+          )}
         </div>
         {thumb && (
           // eslint-disable-next-line @next/next/no-img-element

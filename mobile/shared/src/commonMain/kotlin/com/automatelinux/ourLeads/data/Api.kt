@@ -185,6 +185,13 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
+    /** Confirm ([accept] = true) or reject the change the customer's chat proposed. */
+    suspend fun resolveProposal(leadId: Int, accept: Boolean): Result<Unit> {
+        val body = JsonObject(mapOf("accept" to JsonPrimitive(accept))).toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/leads/$leadId/proposal", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     /** Someone opened the lead — it counts as touching it for "last touched first". */
     suspend fun markViewed(leadId: Int): Result<Unit> {
         val r = httpRequest("POST", "$base/api/leads/$leadId/viewed", token, null, null)

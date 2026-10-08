@@ -489,6 +489,9 @@ private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onE
                     if (sub.isNotEmpty()) T(sub, 14, color = Muted, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                     l.nextStep?.let { T("← $it", 14, color = Ink2, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
                     DealLine(l.deal)
+                    l.proposal?.let { pr ->
+                        Box(Modifier.padding(top = 8.dp)) { Pill("${pr.who}: להעביר ל${pr.summary}? · מחכה לאישור", AmberSoft, Color(0xFF8A4A0B)) }
+                    }
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -648,6 +651,20 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
                             Icon(Icons.Default.AddAPhoto, null, tint = Color.White, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             T(if (uploading) "מעלה…" else "תמונות", 14, FontWeight.SemiBold, Color.White)
+                        }
+                    }
+                }
+            }
+            l.proposal?.let { pr ->
+                item {
+                    ProposalCard(pr, busy) { accept ->
+                        busy = true
+                        scope.launch {
+                            when (val r = api.resolveProposal(l.id, accept)) {
+                                is Result.Ok -> { error = null; onChanged() }
+                                is Result.Err -> error = r.message
+                            }
+                            busy = false
                         }
                     }
                 }
@@ -837,7 +854,7 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
             }
             items(timeline) { it ->
                 when (it) {
-                    is Item.M -> TimelineMessage(it.m, partner)
+                    is Item.M -> TimelineMessage(it.m, partner, l.customerName ?: "הלקוח")
                     is Item.E -> TimelineEvent(it.e, onChanged)
                 }
             }
@@ -1278,8 +1295,33 @@ private fun Rail(dot: Color, size: Dp, top: Dp) {
     }
 }
 
+/** The customer's chat suggests moving the lead. It moves only when one of us taps אשר. */
 @Composable
-private fun TimelineMessage(m: Msg, partner: String) {
+private fun ProposalCard(p: Proposal, busy: Boolean, onResolve: (Boolean) -> Unit) {
+    Column(
+        Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(AmberSoft).border(1.dp, Amber.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(14.dp),
+    ) {
+        T("מהשיחה עם ${p.who} · ${short(p.at)}", 11, FontWeight.SemiBold, Amber)
+        T(p.why, 14, color = Ink2, modifier = Modifier.padding(top = 4.dp))
+        T("להעביר ל: ${p.summary}?", 14, FontWeight.Bold, Ink, Modifier.padding(top = 8.dp))
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            T(
+                "אשר", 14, FontWeight.SemiBold, Color.White,
+                Modifier.clip(CircleShape).background(if (busy) Harbour.copy(alpha = 0.5f) else Harbour)
+                    .clickable(enabled = !busy) { onResolve(true) }.padding(horizontal = 20.dp, vertical = 10.dp),
+            )
+            T(
+                "לא עכשיו", 14, FontWeight.SemiBold, Ink2,
+                Modifier.clip(CircleShape).background(Color.White).border(1.dp, Line, CircleShape)
+                    .clickable(enabled = !busy) { onResolve(false) }.padding(horizontal = 20.dp, vertical = 10.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimelineMessage(m: Msg, partner: String, customer: String) {
     val uri = LocalUriHandler.current
     val api = LocalApi.current
     Row(Modifier.padding(start = 6.dp, end = 16.dp).height(IntrinsicSize.Min)) {
@@ -1289,7 +1331,7 @@ private fun TimelineMessage(m: Msg, partner: String) {
                 .background(if (m.fromMe) Color(0xFFECF8F3) else Color.White)
                 .border(1.dp, if (m.fromMe) Color(0xFFCDEEE0) else Line, RoundedCornerShape(16.dp)).padding(12.dp),
         ) {
-            T("${if (m.fromMe) "אני" else partner} · ${short(m.sentAt)} · וואטסאפ", 11, color = Muted)
+            T("${if (m.fromMe) "אני" else if (m.fromCustomer) customer else partner} · ${short(m.sentAt)} · וואטסאפ", 11, color = Muted)
             if ((m.mediaType == "audio" || m.mediaType == "video") && m.mediaUrl != null) {
                 Row(
                     Modifier.padding(top = 6.dp).clip(CircleShape).background(Paper).clickable { uri.openUri(api.base + m.mediaUrl) }

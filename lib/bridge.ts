@@ -57,7 +57,24 @@ export async function messagesSince(jids: string[], since: string): Promise<Brid
      ORDER BY julianday(timestamp) ASC LIMIT 500`,
     [...jids, since],
   );
-  return rows.map((r) => ({
+  return rows.map(toMessage);
+}
+
+/** Messages in each chat at or after that chat's own `since` (ISO), oldest first. */
+export async function messagesInChats(chats: { jid: string; since: string }[]): Promise<BridgeMessage[]> {
+  if (!chats.length) return [];
+  const rows = await dbquery(
+    `SELECT id, chat_jid, sender, COALESCE(content,''), timestamp, is_from_me, COALESCE(media_type,''), COALESCE(filename,'')
+     FROM messages
+     WHERE (${chats.map(() => "(chat_jid = ? AND julianday(timestamp) >= julianday(?))").join(" OR ")}) AND deleted_at IS NULL
+     ORDER BY julianday(timestamp) ASC LIMIT 500`,
+    chats.flatMap((c) => [c.jid, c.since]),
+  );
+  return rows.map(toMessage);
+}
+
+function toMessage(r: unknown[]): BridgeMessage {
+  return {
     id: String(r[0]),
     chatJid: String(r[1]),
     sender: String(r[2]),
@@ -66,7 +83,7 @@ export async function messagesSince(jids: string[], since: string): Promise<Brid
     fromMe: r[5] === true || r[5] === 1 || r[5] === "1",
     mediaType: String(r[6]),
     filename: String(r[7]),
-  }));
+  };
 }
 
 const EXT: Record<string, string> = {
