@@ -121,12 +121,6 @@ export default function Board() {
               </p>
             </div>
             <div className="ms-auto flex items-center gap-2">
-              {data.pending > 0 && (
-                <span className="text-xs bg-white/10 rounded-full px-2.5 py-1 flex items-center gap-1.5">
-                  <span className="size-1.5 rounded-full bg-amber animate-pulse" />
-                  {data.pending} הודעות בקריאה
-                </span>
-              )}
               <ClearPreview compact />
               <button
                 data-id="open-report"

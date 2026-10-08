@@ -322,17 +322,6 @@ private fun LeadList(
                     "דוח", 13, FontWeight.SemiBold, Color.White,
                     Modifier.clip(CircleShape).background(Color.White.copy(alpha = .12f)).clickable { reporting = true }.padding(horizontal = 12.dp, vertical = 7.dp),
                 )
-                if (d.pending > 0) Spacer(Modifier.width(8.dp))
-                if (d.pending > 0) Row(
-                    Modifier.clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.size(6.dp).clip(CircleShape).background(Amber))
-                    Spacer(Modifier.width(6.dp))
-                    // Just the number: with דוח and נקה קבוצה ריקה beside it there is no room for a
-                    // word, and "48 בקריאה" squeezed into a tall empty pill (2026-10-08).
-                    T("${d.pending}", 12, color = Color.White, maxLines = 1)
-                }
             }
             // Leads / calendar
             Row(Modifier.padding(start = 18.dp, top = 16.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp)) {
