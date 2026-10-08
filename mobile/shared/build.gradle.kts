@@ -35,6 +35,9 @@ kotlin {
             implementation(libs.activity.compose)
             // EXIF rotation of a picked photo (a re-encoded JPEG would lose the tag).
             implementation("androidx.exifinterface:exifinterface:1.3.7")
+            // In-app video player with real controls (seek bar, pause); VideoView's MediaController never showed under Compose.
+            implementation("androidx.media3:media3-exoplayer:1.5.1")
+            implementation("androidx.media3:media3-ui:1.5.1")
         }
     }
 }

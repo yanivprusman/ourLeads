@@ -182,28 +182,28 @@ actual fun rememberBoolPref(key: String, default: Boolean): androidx.compose.run
 
 @Composable
 actual fun VideoPlayer(url: String, modifier: androidx.compose.ui.Modifier, onError: (String) -> Unit) {
+    val context = LocalContext.current
+    val player = remember(url) {
+        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            addListener(object : androidx.media3.common.Player.Listener {
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    onError("הסרטון לא נטען (${error.errorCodeName})")
+                }
+            })
+            prepare()
+            playWhenReady = true
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(player) { onDispose { player.release() } }
     androidx.compose.ui.viewinterop.AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            // VideoView keeps the video's own aspect ratio, so it sits centred in a frame.
-            val video = android.widget.VideoView(ctx)
-            val frame = android.widget.FrameLayout(ctx)
-            frame.addView(
-                video,
-                android.widget.FrameLayout.LayoutParams(
-                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-                    android.view.Gravity.CENTER,
-                ),
-            )
-            val controls = android.widget.MediaController(ctx)
-            controls.setAnchorView(video)
-            video.setMediaController(controls)
-            video.setOnPreparedListener { video.start(); controls.show(0) }
-            video.setOnErrorListener { _, what, extra -> onError("הסרטון לא נטען ($what/$extra)"); true }
-            video.setVideoURI(android.net.Uri.parse(url))
-            frame
+            androidx.media3.ui.PlayerView(ctx).apply {
+                this.player = player
+                setShowNextButton(false)
+                setShowPreviousButton(false)
+            }
         },
-        onRelease = { frame -> (frame.getChildAt(0) as android.widget.VideoView).stopPlayback() },
     )
 }
