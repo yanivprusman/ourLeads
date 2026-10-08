@@ -122,18 +122,32 @@ function reportLeads(): LeadRow[] {
  * chat shows). Both number the leads the same way. Returns the messages and the
  * leads in them.
  */
-export function reportText(): { parts: string[]; leadIds: number[] } {
-  const leads = reportLeads();
-  const groups: { title: string; leads: LeadRow[] }[] = [
-    ...users().map((u) => ({ title: `אצל ${u.name}`, leads: leads.filter((l) => l.holder === u.id) })),
+export interface ReportChoice {
+  id: number;
+  title: string;
+  /** The group it is listed under ("אצל דודו"…). */
+  group: string;
+}
+
+export function reportText(only?: number[]): { parts: string[]; leadIds: number[]; choices: ReportChoice[] } {
+  const open = reportLeads();
+  const allGroups: { title: string; leads: LeadRow[] }[] = [
+    ...users().map((u) => ({ title: `אצל ${u.name}`, leads: open.filter((l) => l.holder === u.id) })),
     {
       title: `אצל ${CUSTOMER.name}`,
-      leads: leads
+      leads: open
         .filter((l) => l.holder === CUSTOMER.id)
         .sort((a, b) => Number(customerDue(b)) - Number(customerDue(a)) || (a.check_back_at ?? "").localeCompare(b.check_back_at ?? "")),
     },
-    { title: "עוד לא אצל אף אחד", leads: leads.filter((l) => !l.holder || (l.holder !== CUSTOMER.id && !users().some((u) => u.id === l.holder))) },
+    { title: "עוד לא אצל אף אחד", leads: open.filter((l) => !l.holder || (l.holder !== CUSTOMER.id && !users().some((u) => u.id === l.holder))) },
   ].filter((g) => g.leads.length);
+  // Every open lead, as the picker lists it; then the report keeps only those chosen.
+  const choices = allGroups.flatMap((g) => g.leads.map((l) => ({ id: l.id, title: l.title, group: g.title })));
+  if (only && !only.length) throw new Error("לא נבחרו לידים לדוח");
+  const keep = only ? new Set(only) : null;
+  const groups = allGroups.map((g) => ({ ...g, leads: keep ? g.leads.filter((l) => keep.has(l.id)) : g.leads })).filter((g) => g.leads.length);
+  const leads = groups.flatMap((g) => g.leads);
+  if (keep && leads.length !== keep.size) throw new Error("חלק מהלידים שנבחרו כבר לא פתוחים — רעננו ובחרו שוב");
 
   const [, m, d] = israelToday().split("-").map(Number);
   const day = `${d}.${m}`;
@@ -141,7 +155,7 @@ export function reportText(): { parts: string[]; leadIds: number[] } {
   const waiting = (l: LeadRow) => (l.holder === CUSTOMER.id && l.check_back_at ? `⏳ ${customerDue(l) ? "הגיע הזמן לחזור אליו" : "חוזרים אליו"} ב${sayWhen(l.check_back_at)}` : null);
 
   const details: string[] = [`*דוח לידים — ${day} · פירוט*`];
-  const summary: string[] = [`*דוח לידים — ${day} · סיכום*`, `${leads.length} פתוחים: ${counts}`];
+  const summary: string[] = [`*דוח לידים — ${day} · סיכום*`, `${leads.length} ${keep ? `מתוך ${open.length} פתוחים` : "פתוחים"}: ${counts}`];
   let n = 0;
   for (const g of groups) {
     details.push(`━━ *${g.title}* (${g.leads.length}) ━━`);
@@ -166,7 +180,7 @@ export function reportText(): { parts: string[]; leadIds: number[] } {
   const parts = [...(leads.length ? [details.join("\n\n")] : []), summary.join("\n\n")].map((p) => `${p}\n\n_${REPORT_MARK} ${day}_`);
   const long = parts.find((p) => p.length > WHATSAPP_MAX);
   if (long) throw new Error(`הדוח ארוך מדי להודעת וואטסאפ אחת (${long.length} תווים, המקסימום ${WHATSAPP_MAX})`);
-  return { parts, leadIds: leads.map((l) => l.id) };
+  return { parts, leadIds: leads.map((l) => l.id), choices };
 }
 
 async function send(target: TextTarget, text: string, kind: "card" | "report", leadIds: number[], who: string, batch: string): Promise<void> {
@@ -195,8 +209,8 @@ export async function sendCardText(leadId: number, hide: Hideable[], who: string
  * Send the report of every open lead. To the preview group it is a draft and
  * touches no lead; to Dudu, each lead in it gets a line in its history.
  */
-export async function sendReport(who: string, target: TextTarget): Promise<{ to: string; messages: number; leads: number }> {
-  const { parts, leadIds } = reportText();
+export async function sendReport(who: string, target: TextTarget, only?: number[]): Promise<{ to: string; messages: number; leads: number }> {
+  const { parts, leadIds } = reportText(only);
   const batch = newBatch();
   for (const p of parts) await send(target, p, "report", leadIds, who, batch);
   const to = TEXT_TARGETS[target].label;
