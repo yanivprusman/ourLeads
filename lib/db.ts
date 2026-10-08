@@ -173,6 +173,8 @@ export function getDb(): DatabaseSync {
     ["holder", "TEXT"],
     // holder = "customer": the day ("2026-10-09") both partners should check back with him.
     ["check_back_at", "TEXT"],
+    // The last time either of us opened it. Not an edit, so it never touches updated_at — only "last touched first" reads it.
+    ["viewed_at", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
   // Whether a photo shows the customer's phone number (lib/photoPhones.ts): none | partial | full, null = not looked at yet.
@@ -250,6 +252,7 @@ export interface LeadRow {
   created_at: string;
   updated_at: string;
   last_message_at: string | null;
+  viewed_at: string | null;
 }
 
 export interface MessageRow {
@@ -293,6 +296,11 @@ export function editEvent(id: number, text: string, who: string): boolean {
 /** Take a history line off the lead (kept in the table, marked with who and when). */
 export function deleteEvent(id: number, who: string): boolean {
   return getDb().prepare("UPDATE events SET deleted_at = ?, deleted_by = ? WHERE id = ? AND deleted_at IS NULL").run(now(), who, id).changes > 0;
+}
+
+/** Someone opened the lead. */
+export function markViewed(id: number): boolean {
+  return getDb().prepare("UPDATE leads SET viewed_at = ? WHERE id = ?").run(now(), id).changes > 0;
 }
 
 export function addEvent(

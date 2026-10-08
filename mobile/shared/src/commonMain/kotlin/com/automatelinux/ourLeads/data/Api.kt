@@ -185,6 +185,12 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
+    /** Someone opened the lead — it counts as touching it for "last touched first". */
+    suspend fun markViewed(leadId: Int): Result<Unit> {
+        val r = httpRequest("POST", "$base/api/leads/$leadId/viewed", token, null, null)
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     /** Take a history line off the lead (the server keeps it, marked with who removed it). */
     suspend fun deleteEvent(id: Int): Result<Unit> {
         val r = httpRequest("DELETE", "$base/api/events/$id", token, null, null)

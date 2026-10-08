@@ -64,6 +64,11 @@ export default function LeadDetail({
   const photos = lead.messages.filter((m) => m.mediaType === "image" && m.mediaUrl).map((m) => m.mediaUrl!);
   const label = (id: string) => data.statuses.find((s) => s.id === id)?.label ?? id;
 
+  // Opening a lead touches it ("נגיעה אחרונה קודם" on the board). Fire and forget: a lost mark only misorders the list.
+  useEffect(() => {
+    void fetch(`/api/leads/${lead.id}/viewed`, { method: "POST" }).catch(() => {});
+  }, [lead.id]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && (photo ? setPhoto(null) : sharing ? setSharing(false) : onClose());
     window.addEventListener("keydown", onKey);

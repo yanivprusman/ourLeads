@@ -554,6 +554,8 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     var talkError by remember(l.id) { mutableStateOf<String?>(null) }
     var sharing by remember(l.id) { mutableStateOf(false) }
     var uploading by remember(l.id) { mutableStateOf(false) }
+    // Opening a lead touches it ("נגיעה אחרונה קודם" on the board). A lost mark only misorders the list.
+    LaunchedEffect(l.id) { api.markViewed(l.id) }
     // Photos from a site visit go straight onto the lead — never through the WhatsApp
     // chat, where the extractor would read them as a new lead.
     val pickPhotos = rememberPhotoPicker { picked ->
