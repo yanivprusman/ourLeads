@@ -116,4 +116,10 @@ data class ErrorBody(val error: String? = null)
 data class ShareLink(val token: String, val url: String)
 
 @Serializable
+data class SentBatch(val batch: String, val kind: String, val to: String, val messages: Int, val sentBy: String, val sentAt: String)
+
+@Serializable
+data class SentList(val sends: List<SentBatch>)
+
+@Serializable
 data class ReportText(val parts: List<String>, val leadIds: List<Int> = emptyList())

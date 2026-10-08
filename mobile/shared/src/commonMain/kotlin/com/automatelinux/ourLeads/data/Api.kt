@@ -155,6 +155,20 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
+    /** Sends WhatsApp still lets us delete: [leadId]'s cards, or the reports when null. */
+    suspend fun recentSends(leadId: Int?): Result<List<SentBatch>> {
+        val r = httpRequest("GET", "$base/api/sent" + (leadId?.let { "?leadId=$it" } ?: ""), token, null, null)
+        if (r.code != 200) return Result.Err(describe(r))
+        return runCatching { Result.Ok(json.decodeFromString(SentList.serializer(), r.text).sends) }
+            .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
+    }
+
+    /** Delete a send for everyone in WhatsApp — every message in it. */
+    suspend fun deleteSend(batch: String): Result<Unit> {
+        val r = httpRequest("DELETE", "$base/api/sent/$batch", token, null, null)
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
     /** Add photos straight to a lead (JPEG bytes each). */
     suspend fun addPhotos(leadId: Int, photos: List<ByteArray>): Result<Unit> {
         val boundary = "----ourleadsphotos${photos.sumOf { it.size }}x${photos.size}"

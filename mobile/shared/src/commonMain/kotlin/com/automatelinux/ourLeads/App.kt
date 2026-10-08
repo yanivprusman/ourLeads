@@ -845,6 +845,7 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
     var hide by remember { mutableStateOf(setOf<String>()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var sentVersion by remember { mutableStateOf(0) }
     val forced = hide.any { it in setOf("contact", "address", "price") }
     val effective = if (forced) hide + "history" else hide
     // Without the customer's details, the server leaves out the photos that show his whole number
@@ -881,10 +882,11 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 SendTextButtons("הכרטיס", resetKey = effective.sorted().joinToString(",")) { to ->
                     when (val r = api.sendCardText(l.id, effective.toList(), to)) {
-                        is Result.Ok -> { onShared(); null }
+                        is Result.Ok -> { sentVersion++; onShared(); null }
                         is Result.Err -> r.message
                     }
                 }
+                RecentSends(l.id, sentVersion, onChanged = onShared)
                 error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
@@ -991,10 +993,63 @@ private fun ReportDialog(onDismiss: () -> Unit) {
                         is Result.Err -> r.message
                     }
                 }
+                RecentSends(null, version)
             }
         },
         confirmButton = { TextButton(onDismiss) { Text("סגירה", color = Muted) } },
     )
+}
+
+/**
+ * Sends made from the app that WhatsApp still lets us delete for everyone (about
+ * two days) — [leadId]'s cards, or the reports when null. Delete takes a second
+ * tap. A new [refreshKey] reloads the list (after a send).
+ */
+@Composable
+private fun RecentSends(leadId: Int?, refreshKey: Int, onChanged: () -> Unit = {}) {
+    val api = LocalApi.current
+    val scope = rememberCoroutineScope()
+    var sends by remember { mutableStateOf(listOf<SentBatch>()) }
+    var version by remember { mutableStateOf(0) }
+    var armed by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(leadId, refreshKey, version) { (api.recentSends(leadId) as? Result.Ok)?.let { sends = it.value } }
+    LaunchedEffect(armed) { if (armed != null) { kotlinx.coroutines.delay(4000); armed = null } }
+    if (sends.isEmpty() && error == null) return
+    Column(Modifier.padding(top = 12.dp)) {
+        T("נשלחו לאחרונה", 13, FontWeight.Bold)
+        sends.forEach { s ->
+            Row(
+                Modifier.padding(top = 6.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    T("${if (s.kind == "report") "דוח" else "כרטיס"} ל${s.to}${if (s.messages > 1) " · ${s.messages} הודעות" else ""}", 14)
+                    T("${s.sentBy} · ${short(s.sentAt)}", 11, color = Muted)
+                }
+                val isArmed = armed == s.batch
+                T(
+                    when { busy == s.batch -> "מוחק…"; isArmed -> "לחצו שוב"; else -> "מחק" }, 13, FontWeight.SemiBold, if (isArmed) Color.White else Danger,
+                    Modifier.clip(CircleShape).background(if (isArmed) Danger else Color.Transparent).border(1.dp, Danger, CircleShape)
+                        .clickable(enabled = busy == null) {
+                            if (!isArmed) { armed = s.batch; return@clickable }
+                            armed = null
+                            busy = s.batch
+                            error = null
+                            scope.launch {
+                                when (val r = api.deleteSend(s.batch)) {
+                                    is Result.Ok -> { version++; onChanged() }
+                                    is Result.Err -> error = r.message
+                                }
+                                busy = null
+                            }
+                        }.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+        error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 6.dp)) }
+    }
 }
 
 /** The ball filter for leads nobody has taken yet — not a user id (ids come from OURLEADS_USERS). */
