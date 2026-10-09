@@ -61,7 +61,7 @@ Yaniv works on dev, Dudu on prod, at the same time on the same leads. So:
 Yaniv is replacing Dudu's part (first talk with the customer, collecting the job) with an assistant on his
 own business number, on Meta's **WhatsApp Cloud API** — no phone behind it.
 - `lib/cloud.ts`: config from `OURLEADS_WA_CLOUD_CONFIG` (JSON, mode 600: `phone_number_id, access_token,
-  app_secret, verify_token, graph_version, alert_jid`). Unset = line not set up: the webhook answers 503 and
+  app_secret, verify_token, graph_version, alert_jid_pigeons_windows, alert_jid_building`, plus `pin`). Unset = line not set up: the webhook answers 503 and
   nothing is read. Customers are filed under `<waId>@business`, never `@s.whatsapp.net` (that is the
   personal number's chat with the same person).
 - `app/api/whatsapp/route.ts`: Meta's webhook, on prod (public). GET = Meta's verify; POST is checked against
@@ -71,7 +71,9 @@ own business number, on Meta's **WhatsApp Cloud API** — no phone behind it.
 - **Rules (Yaniv's)**: not a customer → nothing at all (no reply, no lead, no flag). Never a price, estimate or
   date: a reply naming money is held back (`hasPrice`) and left on the lead. Prices go out only by hand
   (`POST /api/leads/[id]/reply`, the reply box on the lead), inside Meta's 24-hour window.
-- Every batch alerts Yaniv on `alert_jid` through the personal bridge, with a `/?lead=<id>` link.
+- Every batch alerts Yaniv through the personal bridge, with a `/?lead=<id>` link, in one of two groups only he is in —
+  "ג.ח. פרוייקטים – יונים וחלונות" or "ג.ח. פרוייקטים – עבודות גובה" — by the lead's `line` (the assistant classifies it;
+  unclear = building). Customers never see the groups; they all write to the one business number.
 - **Pure API, chosen 2026-10-09** (not coexistence): the secondary number lives on Meta only, no phone. The two-step
   `pin` set at registration is kept ONLY in the config file — whoever has it can register the number in a WhatsApp app,
   which takes it off the API (and moving back is slow). `lib/cloudHealth.ts` asks Meta hourly and alerts on a change.

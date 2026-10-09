@@ -10,6 +10,7 @@ import {
   cloudConfigured,
   downloadCloudMedia,
   isBusinessJid,
+  isLine,
   localPhone,
   messageParts,
   sendCloudText,
@@ -190,6 +191,8 @@ ${todayLine()}
    details: כל מה שידוע על העבודה, 1–4 משפטים. nextStep: מה צריך לקרות עכשיו ומי עושה.
    note: משפט קצר להיסטוריה של הליד על מה שקרה בהודעות החדשות, או null אם אין בהן כלום חדש.
    תמונות: פתח כל תמונה עם הכלי Read לפני שאתה עונה.
+   line: "pigeons_windows" — הרחקת יונים, רשתות יונים, ניקוי לשלשת, ניקוי חלונות/זכוכית/מעקות/גגות זכוכית;
+   "building" — כל השאר (איטום, שיקום בטון, חזיתות, צביעה, אנטנות, מרזבים...). לא ברור עדיין — "building".
 3. reply: ${
     busy
       ? `${OWNER} באמצע עבודה בגובה ולא יכול לענות. אתה עונה ללקוח במקומו — רק אם customer הוא "yes" או "unsure". אחרת reply = null.
@@ -218,8 +221,9 @@ const SCHEMA = {
     },
     note: str,
     reply: str,
+    line: { type: "string", enum: ["pigeons_windows", "building"] },
   },
-  required: ["customer", "lead", "note", "reply"],
+  required: ["customer", "lead", "note", "reply", "line"],
 };
 
 interface Answer {
@@ -227,6 +231,7 @@ interface Answer {
   lead: (LeadFields & { title?: string | null }) | null;
   note: string | null;
   reply: string | null;
+  line: string;
 }
 
 async function handle(jid: string, fresh: MessageRow[], log: Log): Promise<void> {
@@ -259,10 +264,10 @@ async function handle(jid: string, fresh: MessageRow[], log: Log): Promise<void>
         const t = now();
         const r = d
           .prepare(
-            `INSERT INTO leads (source, title, trade, customer_name, phones, address, city, details, status, next_step, created_at, updated_at, last_message_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?)`,
+            `INSERT INTO leads (source, title, trade, customer_name, phones, address, city, details, status, next_step, created_at, updated_at, last_message_at, line)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, ?)`,
           )
-          .run(BUSINESS_SOURCE.id, f.title || "פנייה חדשה", f.trade ?? null, f.customerName ?? profile, JSON.stringify([phone]), f.address ?? null, f.city ?? null, f.details ?? null, f.nextStep ?? null, t, t, last);
+          .run(BUSINESS_SOURCE.id, f.title || "פנייה חדשה", f.trade ?? null, f.customerName ?? profile, JSON.stringify([phone]), f.address ?? null, f.city ?? null, f.details ?? null, f.nextStep ?? null, t, t, last, isLine(a.line) ? a.line : "building");
         leadId = Number(r.lastInsertRowid);
         addEvent(leadId, customer, "created", a.note ?? "פנייה חדשה בקו העסקי", null, "none", fresh[0].sent_at);
         // What he wrote before we knew he was a customer ("היי" → "unsure") belongs on his lead too.
@@ -274,6 +279,8 @@ async function handle(jid: string, fresh: MessageRow[], log: Log): Promise<void>
         if (a.note || Object.keys(patch).length) updateLead(leadId, customer, patch, null, a.note);
       }
       d.prepare("UPDATE leads SET last_message_at = MAX(COALESCE(last_message_at, ''), ?) WHERE id = ?").run(last, leadId);
+      // A first guess ("building" because it was not clear yet) is corrected once the job is known.
+      if (isLine(a.line)) d.prepare("UPDATE leads SET line = ? WHERE id = ? AND source = ?").run(a.line, leadId, BUSINESS_SOURCE.id);
       for (const m of fresh) setState.run(leadId, "done", m.id, jid);
       d.exec("COMMIT");
     } catch (e) {
@@ -318,8 +325,9 @@ async function sendAndStore(jid: string, text: string, writtenBy: string, leadId
 
 /**
  * The business line has no phone to ring, so Yaniv hears about a customer
- * through his own WhatsApp: one line per batch, to `alert_jid` in the Cloud API
- * config. Sent through the personal bridge, which only Yaniv's devices see.
+ * through his own WhatsApp: one line per batch, to the group for the lead's kind of
+ * work (`alertJids` in the Cloud API config) — groups on his personal number that only
+ * he is in, sent through the personal bridge.
  */
 async function alertOwner(leadId: number, isNew: boolean, count: number, log: Log): Promise<void> {
   const lead = getLead(leadId)!;
@@ -330,7 +338,7 @@ async function alertOwner(leadId: number, isNew: boolean, count: number, log: Lo
     `${busy ? "\nהעוזר עונה לו (מצב עסוק)." : "\nאתה במצב זמין — הלקוח מחכה לתשובה שלך."}` +
     `\n${CARD_ORIGIN}/?lead=${leadId}`;
   try {
-    await sendText(cfg.alertJid, text);
+    await sendText(cfg.alertJids[isLine(lead.line) ? lead.line : "building"], text);
   } catch (e) {
     log(`business alert for lead #${leadId} failed:`, (e as Error).message);
   }

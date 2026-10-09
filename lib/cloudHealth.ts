@@ -37,10 +37,13 @@ export async function checkCloudHealth(): Promise<void> {
     verdict === "ok"
       ? "✅ הקו העסקי בוואטסאפ מחובר שוב — לקוחות מגיעים ל-ourLeads."
       : `⚠️ הקו העסקי בוואטסאפ לא עובד: ${verdict}\nלקוחות שכותבים עכשיו לא מגיעים ל-ourLeads ולא מקבלים תשובה.`;
-  try {
-    await sendText(cloud().alertJid, text);
-  } catch (e) {
-    log("alert failed:", (e as Error).message);
+  // The line itself is down, so both groups hear it.
+  for (const jid of Object.values(cloud().alertJids)) {
+    try {
+      await sendText(jid, text);
+    } catch (e) {
+      log(`alert to ${jid} failed:`, (e as Error).message);
+    }
   }
 }
 

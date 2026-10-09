@@ -217,6 +217,8 @@ export function getDb(): DatabaseSync {
     // A change the customer's own chat suggests (lib/proposal.ts) — a status, with its meeting/work
     // dates or price — waiting for one of us to confirm. JSON, null = nothing waiting.
     ["proposal", "TEXT"],
+    // Business line only (lib/assistant.ts): pigeons_windows | building — which alert group hears about it.
+    ["line", "TEXT"],
   ])
     if (!cols.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
   // Whether a photo shows the customer's phone number (lib/photoPhones.ts): none | partial | full, null = not looked at yet.
@@ -308,6 +310,8 @@ export interface LeadRow {
   viewed_at: string | null;
   /** JSON of a `Proposal` (lib/proposal.ts) waiting for confirmation, or null. */
   proposal: string | null;
+  /** Business line only: pigeons_windows | building (lib/cloud.ts LINES); null = not known yet. */
+  line: string | null;
 }
 
 export interface MessageRow {

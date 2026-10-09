@@ -15,7 +15,7 @@ import path from "node:path";
  * busy on a job.
  *
  * `OURLEADS_WA_CLOUD_CONFIG` names a JSON file (mode 600) with
- * `{ phone_number_id, access_token, app_secret, verify_token, graph_version, alert_jid }`, plus `pin` —
+ * `{ phone_number_id, access_token, app_secret, verify_token, graph_version, alert_jid_pigeons_windows, alert_jid_building }`, plus `pin` —
  * the two-step PIN set at registration. Nothing reads `pin`; it is kept there, and only there, because
  * whoever knows it can move the number into a WhatsApp app and take it off the API.
  * Unset means the line is not set up yet — the webhook says so and nothing is
@@ -27,9 +27,17 @@ export interface CloudConfig {
   appSecret: string;
   verifyToken: string;
   graphVersion: string;
-  /** Where Yaniv hears about a customer (a WhatsApp chat on his personal bridge) — the line has no phone to ring. */
-  alertJid: string;
+  /**
+   * Where Yaniv hears about a customer — WhatsApp groups on his personal number (the line has no phone
+   * to ring), one per kind of work, the split Dudu's two sites had: pigeons and windows, and the rest.
+   */
+  alertJids: Record<Line, string>;
 }
+
+/** The kind of work a business-line lead is: pigeons and windows, or everything else at height. */
+export const LINES = ["pigeons_windows", "building"] as const;
+export type Line = (typeof LINES)[number];
+export const isLine = (v: unknown): v is Line => typeof v === "string" && (LINES as readonly string[]).includes(v);
 
 export function cloudConfigured(): boolean {
   return !!process.env.OURLEADS_WA_CLOUD_CONFIG?.trim();
@@ -55,7 +63,7 @@ export function cloud(): CloudConfig {
     appSecret: need("app_secret"),
     verifyToken: need("verify_token"),
     graphVersion: need("graph_version"),
-    alertJid: need("alert_jid"),
+    alertJids: { pigeons_windows: need("alert_jid_pigeons_windows"), building: need("alert_jid_building") },
   };
 }
 
