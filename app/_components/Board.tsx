@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LeadDetail from "./LeadDetail";
 import ReportSheet from "./ReportSheet";
 import ClearPreview from "./ClearPreview";
+import BusyToggle from "./BusyToggle";
 import VoiceDock, { type CommandReply } from "./VoiceDock";
 import Mark from "./Mark";
 import Calendar, { sayDay } from "./Calendar";
@@ -75,6 +76,13 @@ export default function Board() {
     }
   }, []);
 
+  // The business line's alert links to a lead: /?lead=12 opens it.
+  useEffect(() => {
+    const id = Number(new URLSearchParams(location.search).get("lead"));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL
+    if (id) setOpenId(id);
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch
     void load();
@@ -121,6 +129,7 @@ export default function Board() {
               </p>
             </div>
             <div className="ms-auto flex items-center gap-2">
+              <BusyToggle assistant={data.assistant} onChanged={load} />
               <ClearPreview compact />
               <button
                 data-id="open-report"

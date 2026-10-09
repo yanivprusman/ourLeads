@@ -15,6 +15,10 @@ export interface Msg {
   /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */
   phoneShown?: "none" | "partial" | "full" | null;
   source?: string;
+  /** Business line: the assistant wrote it. */
+  byAssistant?: boolean;
+  /** Business line: which of us wrote it by hand. */
+  writtenBy?: string | null;
 }
 
 export interface LeadEvent {
@@ -74,6 +78,8 @@ export interface Lead {
   touchedAt: string;
   messages: Msg[];
   events: LeadEvent[];
+  /** He wrote on the business line; we can answer there until replyUntil (null = window never opened). */
+  businessChat: { replyUntil: string | null; canReply: boolean } | null;
 }
 
 export interface Deal {
@@ -126,6 +132,8 @@ export interface BoardData {
   partnership: import("./split").PartnershipData;
   unassigned: Msg[];
   pending: number;
+  /** The business line's assistant. busy = it answers customers for us. */
+  assistant: { configured: boolean; busy: boolean; at: string | null; by: string | null };
 }
 
 /** "אצלי" for whoever is looking, "אצל דודו" for anyone else, "אצל הלקוח" while we wait for him. */
@@ -170,6 +178,7 @@ export const STATUS_TONE: Record<string, { dot: string; pill: string; rail: stri
 export const PARTNER_TONE: Record<string, { chip: string; initial: string }> = {
   basis: { chip: "bg-basis text-white", initial: "ב" },
   israel: { chip: "bg-israel text-white", initial: "י" },
+  business: { chip: "bg-harbour text-white", initial: "ע" },
 };
 
 export function when(iso: string | null): string {

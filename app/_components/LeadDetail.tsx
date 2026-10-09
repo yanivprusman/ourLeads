@@ -4,6 +4,7 @@ import { ChatIcon, PhoneIcon } from "./Board";
 import DealCard from "./DealCard";
 import SplitCard from "./SplitCard";
 import ScheduleCard from "./ScheduleCard";
+import BusinessReply from "./BusinessReply";
 import ShareCard from "./ShareCard";
 import LeadVoice from "./LeadVoice";
 import {
@@ -407,6 +408,8 @@ export default function LeadDetail({
           </div>
           {error && <p className="text-red-700 text-sm">{error}</p>}
 
+          {lead.businessChat && <BusinessReply lead={lead} onSent={onChanged} />}
+
           <div className="flex items-center justify-between pt-2">
             <h3 className="text-[13px] font-bold text-ink-2">מה קרה עד עכשיו</h3>
             <div className="inline-flex rounded-full bg-white border border-line p-0.5 text-xs">
@@ -589,10 +592,10 @@ function Fact({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
 function MessageRow({ m, partner, customer }: { m: Msg; partner: string; customer: string }) {
   return (
     <li className="relative ps-10">
-      <span className={`absolute start-2 top-3 size-4 rounded-full border-2 border-paper ${m.fromMe ? "bg-israel" : "bg-sky"}`} />
-      <div className={`rounded-2xl px-3.5 py-2.5 text-sm border ${m.fromMe ? "bg-[#ecf8f3] border-[#cdeee0]" : "bg-white border-line"}`}>
+      <span className={`absolute start-2 top-3 size-4 rounded-full border-2 border-paper ${m.byAssistant ? "bg-amber" : m.fromMe ? "bg-israel" : "bg-sky"}`} />
+      <div className={`rounded-2xl px-3.5 py-2.5 text-sm border ${m.byAssistant ? "bg-amber-soft border-[#fbdcb8]" : m.fromMe ? "bg-[#ecf8f3] border-[#cdeee0]" : "bg-white border-line"}`}>
         <div className="text-[11px] text-muted mb-1">
-          {m.fromMe ? "אני" : m.fromCustomer ? customer : partner} · {when(m.sentAt)} · וואטסאפ
+          {m.byAssistant ? "העוזר" : m.fromMe ? (m.writtenBy ?? "אני") : m.fromCustomer ? customer : partner} · {when(m.sentAt)} · וואטסאפ
         </div>
         {m.mediaType === "video" && m.mediaUrl && (
           <video data-id="message-video" src={m.mediaUrl} controls preload="metadata" className="rounded-xl max-h-72 w-full bg-black" />

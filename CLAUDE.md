@@ -57,6 +57,24 @@ Yaniv works on dev, Dudu on prod, at the same time on the same leads. So:
   So prod is minutes behind dev, and a schema change reaches prod with the commit that makes it —
   but a half-written migration in *uncommitted* dev code still runs against the shared DB.
 
+## The business line and its assistant (2026-10-09)
+Yaniv is replacing Dudu's part (first talk with the customer, collecting the job) with an assistant on his
+own business number, on Meta's **WhatsApp Cloud API** — no phone behind it.
+- `lib/cloud.ts`: config from `OURLEADS_WA_CLOUD_CONFIG` (JSON, mode 600: `phone_number_id, access_token,
+  app_secret, verify_token, graph_version, alert_jid`). Unset = line not set up: the webhook answers 503 and
+  nothing is read. Customers are filed under `<waId>@business`, never `@s.whatsapp.net` (that is the
+  personal number's chat with the same person).
+- `app/api/whatsapp/route.ts`: Meta's webhook, on prod (public). GET = Meta's verify; POST is checked against
+  `X-Hub-Signature-256` and only stores messages — the ingest loop reads them (`lib/assistant.ts`).
+- **Busy mode** (`settings.assistant_busy`, header switch, `POST /api/assistant {busy}`): on = the assistant
+  answers, saying it is Yaniv's assistant and he is on a job; off = silent. No timer — it stays as set.
+- **Rules (Yaniv's)**: not a customer → nothing at all (no reply, no lead, no flag). Never a price, estimate or
+  date: a reply naming money is held back (`hasPrice`) and left on the lead. Prices go out only by hand
+  (`POST /api/leads/[id]/reply`, the reply box on the lead), inside Meta's 24-hour window.
+- Every batch alerts Yaniv on `alert_jid` through the personal bridge, with a `/?lead=<id>` link.
+- Test it without the live board or a real send: copy the DB to a scratch dir, mock `fetch`, and run the lib
+  with `npx tsx --conditions=react-server` (the `server-only` import needs that condition).
+
 ## Testing
 Never test commands that name real leads against the live board: they change real leads.
 To re-run extraction, clear `leads` and `events`, set `messages.state='pending'`, and restart

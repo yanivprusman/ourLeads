@@ -5,6 +5,8 @@ import { mediaSig } from "./auth";
 import { posterName } from "./poster";
 import { partnership } from "./partnership";
 import { describeProposal, readProposal } from "./proposal";
+import { ASSISTANT, BUSINESS_SOURCE, busyState, windowOpenUntil } from "./assistant";
+import { cloudConfigured, isBusinessJid } from "./cloud";
 
 /** The board as both clients read it: one payload, small enough to send whole. */
 
@@ -17,8 +19,12 @@ export function messageView(m: MessageRow) {
     id: m.id,
     chatJid: m.chat_jid,
     fromMe: !!m.from_me,
-    /** Written by the customer himself, in his own chat (lib/customerChats.ts). */
-    fromCustomer: m.source === "customer" && !m.from_me,
+    /** Written by the customer himself, in his own chat (lib/customerChats.ts) or on the business line (lib/assistant.ts). */
+    fromCustomer: (m.source === "customer" || m.source === BUSINESS_SOURCE.id) && !m.from_me,
+    /** Business line, from_me: written by the assistant, not by one of us. */
+    byAssistant: !!m.from_me && m.written_by === ASSISTANT,
+    /** Business line, from_me by hand: which of us wrote it. */
+    writtenBy: m.from_me && m.written_by !== ASSISTANT ? m.written_by : null,
     sentAt: m.sent_at,
     content: m.content,
     mediaType: m.media_type,
@@ -38,7 +44,12 @@ function proposalView(l: LeadRow) {
   return { status: p.status, statusLabel: p.status ? STATUS_LABELS[p.status] : null, summary: describeProposal(p), why: p.why, who: p.who, at: p.at };
 }
 
+function replyWindow(until: string | null) {
+  return { replyUntil: until, canReply: !!until && until > new Date().toISOString() };
+}
+
 function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
+  const business = [...msgs].reverse().find((m) => isBusinessJid(m.chat_jid))?.chat_jid ?? null;
   return {
     id: l.id,
     source: l.source,
@@ -86,6 +97,8 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
       l.created_at,
     ),
     messages: msgs.map(messageView),
+    /** He wrote on the business line: we can answer him there until `replyUntil` (Meta's 24-hour window). */
+    businessChat: business ? replyWindow(windowOpenUntil(business)) : null,
     events: events.map((e) => ({
       id: e.id,
       at: e.at,
@@ -127,7 +140,9 @@ export function board(me: { id: string; name: string }) {
   return {
     me,
     statuses: STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s] })),
-    sources: SOURCES.map((s) => ({ id: s.id, label: s.label, actor: s.actor })),
+    sources: [...SOURCES, BUSINESS_SOURCE].map((s) => ({ id: s.id, label: s.label, actor: s.actor })),
+    /** The business line's assistant: whether the line is set up, and whether it is answering for us (busy). */
+    assistant: { configured: cloudConfigured(), ...busyState() },
     /** Who the ball can be passed to. */
     people: users().map((u) => ({ id: u.id, name: u.name })),
     /** The ball's third place: the customer's hands (not one of `people`). */

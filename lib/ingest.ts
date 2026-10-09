@@ -9,6 +9,7 @@ import { claimCardLink } from "./shares";
 import { claimSentText } from "./cardText";
 import { classifyPhotos } from "./photoPhones";
 import { processCustomerChats, pullCustomerChats } from "./customerChats";
+import { processBusinessChats } from "./assistant";
 import {
   STATUSES,
   STATUS_LABELS,
@@ -62,6 +63,7 @@ export async function tick(): Promise<void> {
     await pullCustomerChats(log);
     for (const s of SOURCES) await processSource(s);
     await processCustomerChats(log);
+    await processBusinessChats(log);
     await classifyPhotos(log);
   } catch (e) {
     log("tick failed:", (e as Error).message);

@@ -164,6 +164,13 @@ export function getDb(): DatabaseSync {
       updated_at TEXT NOT NULL,
       updated_by TEXT NOT NULL
     );
+    -- Small switches both servers read (one data dir): today only the assistant's busy mode.
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT NOT NULL
+    );
     -- Every change to the terms and every approval, so "I never agreed to that" has an answer.
     CREATE TABLE IF NOT EXISTS partnership_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,6 +222,10 @@ export function getDb(): DatabaseSync {
   // Whether a photo shows the customer's phone number (lib/photoPhones.ts): none | partial | full, null = not looked at yet.
   const msgCols = new Set((db.prepare("PRAGMA table_info(messages)").all() as { name: string }[]).map((c) => c.name));
   if (!msgCols.has("phone_shown")) db.exec("ALTER TABLE messages ADD COLUMN phone_shown TEXT");
+  // The business line (lib/cloud.ts): Meta's id for a message's media, fetched when the chat is read;
+  // and who wrote it — the customer's WhatsApp name, or for from_me "assistant" / the partner who answered by hand.
+  if (!msgCols.has("media_ref")) db.exec("ALTER TABLE messages ADD COLUMN media_ref TEXT");
+  if (!msgCols.has("written_by")) db.exec("ALTER TABLE messages ADD COLUMN written_by TEXT");
   // sent_texts, later: the WhatsApp id of each sent message (so it can be deleted for
   // everyone), the send it belongs to (a report is two messages, deleted together),
   // and when it was deleted.
@@ -313,6 +324,10 @@ export interface MessageRow {
   state: string;
   error: string | null;
   phone_shown: "none" | "partial" | "full" | null;
+  /** Business line only: Meta's media id, until the file is fetched. */
+  media_ref: string | null;
+  /** Business line: the customer's WhatsApp name; from_me: "assistant", or the partner who answered by hand. */
+  written_by: string | null;
 }
 
 export interface EventRow {

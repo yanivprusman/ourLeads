@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { CARD_ORIGIN, SOURCES } from "./config";
+import { BUSINESS_SOURCE } from "./assistant";
 import { STATUS_LABELS, addEvent, getDb, getLead, now, statusLabel, type EventRow, type MessageRow } from "./db";
 import { messageView } from "./view";
 
@@ -161,7 +162,7 @@ export function leadCard(leadId: number, hidden: Hideable[]) {
   const events = hide.has("history")
     ? []
     : (d.prepare("SELECT * FROM events WHERE lead_id = ? AND kind != 'share' AND deleted_at IS NULL ORDER BY at ASC, id ASC").all(lead.id) as unknown as EventRow[]);
-  const source = SOURCES.find((s) => s.id === lead.source);
+  const source = [...SOURCES, BUSINESS_SOURCE].find((s) => s.id === lead.source);
   const views = msgs.map(messageView);
   return {
     revoked: false as const,
