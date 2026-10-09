@@ -72,6 +72,9 @@ own business number, on Meta's **WhatsApp Cloud API** — no phone behind it.
   date: a reply naming money is held back (`hasPrice`) and left on the lead. Prices go out only by hand
   (`POST /api/leads/[id]/reply`, the reply box on the lead), inside Meta's 24-hour window.
 - Every batch alerts Yaniv on `alert_jid` through the personal bridge, with a `/?lead=<id>` link.
+- **Pure API, chosen 2026-10-09** (not coexistence): the secondary number lives on Meta only, no phone. The two-step
+  `pin` set at registration is kept ONLY in the config file — whoever has it can register the number in a WhatsApp app,
+  which takes it off the API (and moving back is slow). `lib/cloudHealth.ts` asks Meta hourly and alerts on a change.
 - Test it without the live board or a real send: copy the DB to a scratch dir, mock `fetch`, and run the lib
   with `npx tsx --conditions=react-server` (the `server-only` import needs that condition).
 

@@ -14,7 +14,9 @@ export async function register() {
     }
     const { startIngest } = await import("./lib/ingest");
     const { startBackups } = await import("./lib/backup");
+    const { startCloudHealth } = await import("./lib/cloudHealth");
     startIngest();
     startBackups();
+    startCloudHealth();
   }
 }

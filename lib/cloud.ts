@@ -15,7 +15,9 @@ import path from "node:path";
  * busy on a job.
  *
  * `OURLEADS_WA_CLOUD_CONFIG` names a JSON file (mode 600) with
- * `{ phone_number_id, access_token, app_secret, verify_token, graph_version, alert_jid }`.
+ * `{ phone_number_id, access_token, app_secret, verify_token, graph_version, alert_jid }`, plus `pin` —
+ * the two-step PIN set at registration. Nothing reads `pin`; it is kept there, and only there, because
+ * whoever knows it can move the number into a WhatsApp app and take it off the API.
  * Unset means the line is not set up yet — the webhook says so and nothing is
  * read or sent. Set but unreadable is an error, never a quiet "not set up".
  */
@@ -204,4 +206,12 @@ export async function sendCloudText(waId: string, body: string): Promise<string>
   const id = json.messages?.[0]?.id;
   if (!id) throw new Error("Graph accepted the message but returned no id");
   return id;
+}
+
+/** What Meta says about the number: CLOUD_API + CONNECTED is the only healthy answer (lib/cloudHealth.ts). */
+export async function phoneNumberStatus(): Promise<{ status: string | null; platformType: string | null; name: string | null }> {
+  const cfg = cloud();
+  const res = await graph(cfg, `${encodeURIComponent(cfg.phoneNumberId)}?fields=status,platform_type,verified_name`);
+  const j = (await res.json()) as { status?: string; platform_type?: string; verified_name?: string };
+  return { status: j.status ?? null, platformType: j.platform_type ?? null, name: j.verified_name ?? null };
 }
