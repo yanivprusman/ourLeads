@@ -20,6 +20,20 @@ expect fun rememberVoiceRecorder(): VoiceRecorder
 
 expect fun decodeImage(bytes: ByteArray, full: Boolean = false): ImageBitmap?
 
+/**
+ * Photos kept on the phone. A media file's name is its WhatsApp message id (or that
+ * plus `.thumb.jpg` / `.poster.jpg`) and never changes, so a saved copy never goes stale:
+ * once read, a photo is not downloaded again — not after a restart, not on mobile data.
+ * The system may clear it when storage runs low; then it is simply fetched again.
+ */
+interface MediaDisk {
+    suspend fun read(name: String): ByteArray?
+    suspend fun write(name: String, bytes: ByteArray)
+}
+
+@Composable
+expect fun rememberMediaDisk(): MediaDisk
+
 /** The system back gesture closes an open lead instead of leaving the app. */
 @Composable
 expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)

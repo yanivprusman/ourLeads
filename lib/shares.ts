@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { CARD_ORIGIN, SOURCES } from "./config";
+import { CARD_ORIGIN, SOURCES, brandOf } from "./config";
 import { BUSINESS_SOURCE } from "./assistant";
 import { STATUS_LABELS, addEvent, getDb, getLead, now, statusLabel, type EventRow, type MessageRow } from "./db";
 import { messageView } from "./view";
@@ -135,12 +135,14 @@ export function leadCard(leadId: number, hidden: Hideable[]) {
   const events = hide.has("history")
     ? []
     : (d.prepare("SELECT * FROM events WHERE lead_id = ? AND kind != 'share' AND deleted_at IS NULL ORDER BY at ASC, id ASC").all(lead.id) as unknown as EventRow[]);
+  // Who wrote the other side of the chat comes from where it really came from; the label is the brand.
   const source = [...SOURCES, BUSINESS_SOURCE].find((s) => s.id === lead.source);
+  const brand = SOURCES.find((s) => s.id === brandOf(lead));
   const views = msgs.map(messageView);
   return {
     revoked: false as const,
     hidden: [...hide],
-    sourceLabel: source?.label ?? lead.source,
+    sourceLabel: brand?.label ?? lead.source,
     partner: source?.actor ?? "שותף",
     title: scrub(lead.title, hide)!,
     trade: lead.trade,

@@ -15,6 +15,8 @@ data class Msg(
     val mediaUrl: String? = null,
     /** Videos only: a still frame for the top of the card. */
     val posterUrl: String? = null,
+    /** A small copy, for drawing it small (a card's square). */
+    val thumbUrl: String? = null,
     val transcript: String? = null,
     val error: String? = null,
     val source: String? = null,

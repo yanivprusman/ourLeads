@@ -47,3 +47,47 @@ export async function ensurePoster(dir: string, video: string): Promise<void> {
     throw e;
   }
 }
+
+/**
+ * A small copy of a photo (or of a video's poster) for the places that show it small —
+ * the board's card, the strip on a lead. Phones read the board over mobile data, and
+ * a card's 72-pixel square was fetching the whole camera photo, half a megabyte, to
+ * draw it. Same scheme as the poster: `<file>.thumb.jpg` beside it, made on first ask.
+ */
+const THUMB_SUFFIX = ".thumb.jpg";
+/** Long side of a thumbnail, in pixels — sharp at the strip's size on a 3x screen. */
+const THUMB_PX = 480;
+
+export function thumbName(file: string): string {
+  return file + THUMB_SUFFIX;
+}
+
+/** The file a thumbnail name belongs to, or null when it is not a thumbnail. */
+export function sourceOfThumb(file: string): string | null {
+  return file.endsWith(THUMB_SUFFIX) ? file.slice(0, -THUMB_SUFFIX.length) : null;
+}
+
+/** Make the thumbnail of `source` in `dir` unless it is already there. Throws when ffmpeg cannot. */
+export async function ensureThumb(dir: string, source: string): Promise<void> {
+  const out = path.join(dir, thumbName(source));
+  try {
+    await access(out);
+    return;
+  } catch {}
+  const tmp = `${out}.${process.pid}.${Date.now()}.tmp.jpg`;
+  try {
+    await run(
+      "ffmpeg",
+      [
+        "-v", "error", "-y", "-i", path.join(dir, source),
+        "-vf", `scale='if(gt(iw,ih),min(${THUMB_PX},iw),-2)':'if(gt(iw,ih),-2,min(${THUMB_PX},ih))'`,
+        "-frames:v", "1", "-q:v", "4", tmp,
+      ],
+      { timeout: 30_000 },
+    );
+    await rename(tmp, out);
+  } catch (e) {
+    await unlink(tmp).catch(() => {});
+    throw e;
+  }
+}

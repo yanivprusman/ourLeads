@@ -365,7 +365,7 @@ function PartnerBadge({ source, data }: { source: string; data: BoardData }) {
 
 function LeadCard({ lead: l, data, onOpen }: { lead: Lead; data: BoardData; onOpen: () => void }) {
   const tone = STATUS_TONE[l.status];
-  const thumb = l.messages.find((m) => m.mediaType === "image" && m.mediaUrl)?.mediaUrl;
+  const thumb = l.messages.find((m) => m.mediaType === "image" && m.thumbUrl)?.thumbUrl;
   const phone = l.phones[0];
   const faded = l.status === "removed";
   return (

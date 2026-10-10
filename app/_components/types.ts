@@ -10,6 +10,8 @@ export interface Msg {
   mediaUrl: string | null;
   /** Videos only: a still frame for the top of the card. */
   posterUrl?: string | null;
+  /** A small copy, for drawing it small (a card's square). */
+  thumbUrl?: string | null;
   transcript: string | null;
   error: string | null;
   /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */

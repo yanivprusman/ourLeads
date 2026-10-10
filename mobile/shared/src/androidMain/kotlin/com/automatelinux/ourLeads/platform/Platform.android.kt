@@ -18,7 +18,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 actual fun decodeImage(bytes: ByteArray, full: Boolean): ImageBitmap? {
     // Thumbnails and the detail view never need the camera's full resolution;
@@ -206,4 +208,30 @@ actual fun VideoPlayer(url: String, modifier: androidx.compose.ui.Modifier, onEr
             }
         },
     )
+}
+
+@Composable
+actual fun rememberMediaDisk(): MediaDisk {
+    val context = LocalContext.current
+    return remember { AndroidMediaDisk(File(context.cacheDir, "media")) }
+}
+
+private class AndroidMediaDisk(private val dir: File) : MediaDisk {
+    // Names come from our own server, but a path separator must never reach the file system.
+    private fun file(name: String): File? = name.takeIf { it.isNotEmpty() && '/' !in it && it != "." && it != ".." }?.let { File(dir, it) }
+
+    override suspend fun read(name: String): ByteArray? = withContext(Dispatchers.IO) {
+        file(name)?.takeIf { it.isFile }?.let { runCatching { it.readBytes() }.getOrNull() }
+    }
+
+    override suspend fun write(name: String, bytes: ByteArray): Unit = withContext(Dispatchers.IO) {
+        val f = file(name) ?: return@withContext
+        // Written aside and renamed, so a read never sees half a photo.
+        runCatching {
+            dir.mkdirs()
+            val tmp = File(dir, "$name.${System.nanoTime()}.tmp")
+            tmp.writeBytes(bytes)
+            if (!tmp.renameTo(f)) tmp.delete()
+        }.onFailure { println("ourLeads: could not keep $name: ${it.message}") }
+    }
 }

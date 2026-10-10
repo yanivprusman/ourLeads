@@ -1,5 +1,6 @@
 package com.automatelinux.ourLeads.data
 
+import com.automatelinux.ourLeads.platform.MediaDisk
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -29,7 +30,7 @@ private val json = Json { ignoreUnknownKeys = true; isLenient = true; explicitNu
  * exceptions: this is used in a van between jobs, and "the VPN is down" has to
  * read as that rather than as a spinner.
  */
-class OurLeadsApi(baseUrl: String, private val token: String) {
+class OurLeadsApi(baseUrl: String, private val token: String, private val disk: MediaDisk) {
     val base = baseUrl.trimEnd('/')
     val configured: Boolean get() = token.isNotEmpty()
 
@@ -226,9 +227,15 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
 
     /** Media URLs are signed by the server and need no token. */
     suspend fun media(path: String): ByteArray? {
+        val name = path.substringBefore('?').substringAfterLast('/')
+        disk.read(name)?.let { return it }
         val r = httpRequest("GET", base + path, "", null, null)
-        if (r.code != 200) println("ourLeads: media ${path.substringBefore('?')} failed: ${r.code} ${r.transportError ?: ""}")
-        return if (r.code == 200) r.bytes else null
+        if (r.code != 200) {
+            println("ourLeads: media $name failed: ${r.code} ${r.transportError ?: ""}")
+            return null
+        }
+        disk.write(name, r.bytes)
+        return r.bytes
     }
 
     companion object {

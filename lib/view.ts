@@ -1,8 +1,8 @@
 import "server-only";
-import { ASSISTANT, CUSTOMER, SOURCES, users } from "./config";
+import { ASSISTANT, CUSTOMER, SOURCES, brandOf, users } from "./config";
 import { STATUSES, STATUS_LABELS, customerDue, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
 import { mediaSig } from "./auth";
-import { posterName } from "./poster";
+import { posterName, thumbName } from "./poster";
 import { partnership } from "./partnership";
 import { describeProposal, readProposal } from "./proposal";
 import { BUSINESS_SOURCE, busyState, windowOpenUntil } from "./assistant";
@@ -31,6 +31,8 @@ export function messageView(m: MessageRow) {
     mediaUrl: m.media_file ? mediaUrl(m.media_file) : null,
     /** Videos only: a still frame for the top of the card (lib/poster.ts). */
     posterUrl: m.media_type === "video" && m.media_file ? mediaUrl(posterName(m.media_file)) : null,
+    /** A small copy for wherever it is drawn small (lib/poster.ts): of the photo, or of a video's poster. */
+    thumbUrl: !m.media_file ? null : m.media_type === "image" ? mediaUrl(thumbName(m.media_file)) : m.media_type === "video" ? mediaUrl(thumbName(posterName(m.media_file))) : null,
     transcript: m.transcript,
     error: m.error,
     /** Photos only: does it show the customer's phone — none | partial | full, null = not checked yet. */
@@ -52,7 +54,8 @@ function leadView(l: LeadRow, msgs: MessageRow[], events: EventRow[]) {
   const business = [...msgs].reverse().find((m) => isBusinessJid(m.chat_jid))?.chat_jid ?? null;
   return {
     id: l.id,
-    source: l.source,
+    /** The brand it is shown under (lib/config.ts brandOf) — business-line leads included. */
+    source: brandOf(l),
     title: l.title,
     trade: l.trade,
     customerName: l.customer_name,
@@ -140,7 +143,7 @@ export function board(me: { id: string; name: string }) {
   return {
     me,
     statuses: STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s] })),
-    sources: [...SOURCES, BUSINESS_SOURCE].map((s) => ({ id: s.id, label: s.label, actor: s.actor })),
+    sources: SOURCES.map((s) => ({ id: s.id, label: s.label, actor: s.actor })),
     /** The business line's assistant: whether the line is set up, and whether it is answering for us (busy). */
     assistant: { ...ASSISTANT, configured: cloudConfigured(), ...busyState() },
     /** Who the ball can be passed to. */

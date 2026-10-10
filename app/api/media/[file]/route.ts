@@ -2,7 +2,7 @@ import { open } from "node:fs/promises";
 import path from "node:path";
 import { isMediaSig } from "@/lib/auth";
 import { dataDir } from "@/lib/config";
-import { ensurePoster, videoOfPoster } from "@/lib/poster";
+import { ensurePoster, ensureThumb, sourceOfThumb, videoOfPoster } from "@/lib/poster";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,12 +24,21 @@ export async function GET(request: Request, ctx: RouteContext<"/api/media/[file]
   const sig = new URL(request.url).searchParams.get("sig") ?? "";
   if (!isMediaSig(file, sig)) return new Response("forbidden", { status: 403 });
   const dir = path.join(dataDir(), "media");
-  const video = videoOfPoster(file);
+  // A thumbnail of a poster needs the poster first.
+  const thumbOf = sourceOfThumb(file);
+  const video = videoOfPoster(thumbOf ?? file);
   if (video) {
     try {
       await ensurePoster(dir, video);
     } catch (e) {
       return new Response(`poster failed: ${e instanceof Error ? e.message : e}`, { status: 500 });
+    }
+  }
+  if (thumbOf) {
+    try {
+      await ensureThumb(dir, thumbOf);
+    } catch (e) {
+      return new Response(`thumbnail failed: ${e instanceof Error ? e.message : e}`, { status: 500 });
     }
   }
   let fh;

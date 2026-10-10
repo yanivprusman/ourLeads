@@ -78,6 +78,7 @@ import com.automatelinux.ourLeads.platform.rememberBoolPref
 import com.automatelinux.ourLeads.platform.PlatformBackHandler
 import com.automatelinux.ourLeads.platform.VideoPlayer
 import com.automatelinux.ourLeads.platform.decodeImage
+import com.automatelinux.ourLeads.platform.rememberMediaDisk
 import com.automatelinux.ourLeads.platform.VoiceRecorder
 import com.automatelinux.ourLeads.platform.rememberContactSync
 import com.automatelinux.ourLeads.platform.rememberShareText
@@ -166,7 +167,8 @@ fun App(
     /** Room under the voice dock: dev builds pin the feedback-lib button in that corner. */
     dockBottom: Dp = 12.dp,
 ) {
-    val api = remember { OurLeadsApi(baseUrl, token) }
+    val disk = rememberMediaDisk()
+    val api = remember { OurLeadsApi(baseUrl, token, disk) }
     val base = MaterialTheme.typography
     val type = remember(fontFamily) {
         Typography(
@@ -452,7 +454,7 @@ private fun Pill(text: String, bg: Color, fg: Color, strike: Boolean = false) =
 private fun LeadCard(d: BoardData, l: Lead, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onClick: () -> Unit) {
     val uri = LocalUriHandler.current
     val t = tone(l.status)
-    val thumb = l.messages.firstOrNull { it.mediaType == "image" && it.mediaUrl != null }?.mediaUrl
+    val thumb = l.messages.firstOrNull { it.mediaType == "image" && it.thumbUrl != null }?.thumbUrl
     val phone = l.phones.firstOrNull()
     val faded = l.status in CLOSED
     Column(

@@ -125,6 +125,18 @@ export const SOURCES: Source[] = [
 ];
 
 /**
+ * The brand a lead is shown under. A business-line lead (source "business",
+ * lib/assistant.ts BUSINESS_SOURCE) goes under the brand of its kind of work, which the
+ * assistant classifies (`line`); not classified yet = work at height, the same default
+ * its alert uses. The stored source is untouched — the business line's code finds its
+ * leads by it.
+ */
+export function brandOf(lead: { source: string; line: string | null }): string {
+  if (lead.source !== "business") return lead.source;
+  return lead.line === "pigeons_windows" ? "israel" : "basis";
+}
+
+/**
  * Where a shared lead card is opened. Always prod, even when the link is made on
  * dev: the card goes to people who have no dev access (a subcontractor),
  * and both servers read the one shared board, so the token is valid on either.
