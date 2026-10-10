@@ -228,6 +228,17 @@ export function getDb(): DatabaseSync {
   // and who wrote it — the customer's WhatsApp name, or for from_me "assistant" / the partner who answered by hand.
   if (!msgCols.has("media_ref")) db.exec("ALTER TABLE messages ADD COLUMN media_ref TEXT");
   if (!msgCols.has("written_by")) db.exec("ALTER TABLE messages ADD COLUMN written_by TEXT");
+  // Business-line messages already copied into the clone group (lib/mirror.ts). Created
+  // holding everything that came before it, so turning the clone on does not replay history.
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mirrored'").get()) {
+    db.exec(`CREATE TABLE mirrored (
+      message_id TEXT NOT NULL,
+      chat_jid TEXT NOT NULL,
+      mirrored_at TEXT NOT NULL,
+      PRIMARY KEY (message_id, chat_jid)
+    )`);
+    db.prepare("INSERT INTO mirrored (message_id, chat_jid, mirrored_at) SELECT id, chat_jid, ? FROM messages WHERE source = 'business'").run("before-mirror");
+  }
   // sent_texts, later: the WhatsApp id of each sent message (so it can be deleted for
   // everyone), the send it belongs to (a report is two messages, deleted together),
   // and when it was deleted.

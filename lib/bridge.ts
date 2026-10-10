@@ -1,5 +1,5 @@
 import "server-only";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { bridge } from "./config";
 
@@ -7,7 +7,8 @@ import { bridge } from "./config";
  * Access to the WhatsApp bridge on the leader. All calls go through its
  * authenticated endpoints — never a second whatsmeow session (one account
  * allows exactly one linked client; a second one kicks the first off forever).
- * The only send is `sendText`, to a `TEXT_TARGETS` chat — see lib/config.ts.
+ * Sends go to `TEXT_TARGETS` chats (lib/config.ts) and to the business line's own
+ * groups in the Cloud API config (alerts, and the clone in lib/mirror.ts).
  */
 
 async function call(pathname: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -128,6 +129,27 @@ export async function sendText(jid: string, message: string): Promise<string> {
   if (!json.success) throw new Error(`bridge send failed: ${json.message ?? "unknown error"}`);
   if (!json.message_id) throw new Error("bridge send returned no message_id — the bridge on the leader is older than /api/revoke");
   return json.message_id;
+}
+
+/** Send a file (photo, video, voice note, document) from Yaniv's own number, with an optional caption. */
+export async function sendMedia(jid: string, file: string, caption: string): Promise<string> {
+  const res = await call(
+    "/send",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipient: jid,
+        message: caption,
+        media_base64: (await readFile(file)).toString("base64"),
+        media_filename: path.basename(file),
+      }),
+    },
+    120_000,
+  );
+  const json = (await res.json()) as { success: boolean; message?: string; message_id?: string };
+  if (!json.success) throw new Error(`bridge media send failed: ${json.message ?? "unknown error"}`);
+  return json.message_id ?? "";
 }
 
 /** Delete one of our own sent messages for everyone. WhatsApp refuses once it is too old (~2 days). */

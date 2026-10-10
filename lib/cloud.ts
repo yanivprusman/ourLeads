@@ -32,6 +32,8 @@ export interface CloudConfig {
    * to ring), one per kind of work, the split Dudu's two sites had: pigeons and windows, and the rest.
    */
   alertJids: Record<Line, string>;
+  /** The group every message on the line is copied into, as is (lib/mirror.ts). */
+  mirrorJid: string;
 }
 
 /** The kind of work a business-line lead is: pigeons and windows, or everything else at height. */
@@ -64,6 +66,7 @@ export function cloud(): CloudConfig {
     verifyToken: need("verify_token"),
     graphVersion: need("graph_version"),
     alertJids: { pigeons_windows: need("alert_jid_pigeons_windows"), building: need("alert_jid_building") },
+    mirrorJid: need("mirror_jid"),
   };
 }
 

@@ -18,5 +18,7 @@ export async function register() {
     startIngest();
     startBackups();
     startCloudHealth();
+    const { startMirror } = await import("./lib/mirror");
+    startMirror();
   }
 }
