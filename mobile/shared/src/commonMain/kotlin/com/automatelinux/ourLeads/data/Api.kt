@@ -227,6 +227,7 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
     /** Media URLs are signed by the server and need no token. */
     suspend fun media(path: String): ByteArray? {
         val r = httpRequest("GET", base + path, "", null, null)
+        if (r.code != 200) println("ourLeads: media ${path.substringBefore('?')} failed: ${r.code} ${r.transportError ?: ""}")
         return if (r.code == 200) r.bytes else null
     }
 

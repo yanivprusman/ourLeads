@@ -521,14 +521,25 @@ private fun QuickAction(icon: ImageVector, label: String, color: Color, modifier
 
 // ── Images ───────────────────────────────────────────────────────────────────
 private val imageCache = mutableMapOf<String, ImageBitmap>()
+/** Waits between tries of a photo that did not load; the last one repeats. */
+private val IMAGE_RETRY_MS = longArrayOf(1_000, 3_000, 10_000, 30_000, 60_000)
 
 @Composable
 private fun RemoteImage(path: String, modifier: Modifier, crop: Boolean = true, full: Boolean = false) {
     val api = LocalApi.current
     val key = if (full) "$path#full" else path
     var bmp by remember(key) { mutableStateOf(imageCache[key]) }
+    // A failed load is tried again: one bad moment (the app coming back from the background,
+    // a dropped packet on mobile data) used to leave the card grey until the app was restarted.
+    // The cache is checked first each time — another view of the same photo may have loaded it.
     LaunchedEffect(key) {
-        if (bmp == null) api.media(path)?.let { decodeImage(it, full) }?.let { imageCache[key] = it; bmp = it }
+        var attempt = 0
+        while (bmp == null) {
+            imageCache[key]?.let { bmp = it; return@LaunchedEffect }
+            val loaded = api.media(path)?.let { decodeImage(it, full) }
+            if (loaded != null) { imageCache[key] = loaded; bmp = loaded; return@LaunchedEffect }
+            delay(IMAGE_RETRY_MS[minOf(attempt++, IMAGE_RETRY_MS.lastIndex)])
+        }
     }
     val b = bmp
     if (b != null) Image(b, null, modifier, contentScale = if (crop) ContentScale.Crop else ContentScale.Fit)
