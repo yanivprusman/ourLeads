@@ -46,6 +46,13 @@ export interface User {
  */
 export const CUSTOMER = { id: "customer", name: "הלקוח" } as const;
 
+/**
+ * The business line's assistant took over Dudu's part when he left (2026-10-10): the first
+ * talk with the customer, collecting the job. So it is a place the ball can be — "the
+ * assistant is on it" — like the customer, and not a user: it has no login and no share.
+ */
+export const ASSISTANT = { id: "assistant", name: "העוזר" } as const;
+
 /** Days we give the customer when the ball is passed to him without a date. */
 export const CUSTOMER_DAYS = 3;
 
@@ -71,7 +78,7 @@ export function users(): User[] {
     token: String(u.token ?? "").trim(),
   }));
   for (const u of list) {
-    if (u.id === CUSTOMER.id || u.id === "nobody")
+    if (u.id === CUSTOMER.id || u.id === ASSISTANT.id || u.id === "nobody")
       throw new Error(`OURLEADS_USERS may not use the id "${u.id}" — it is a place the ball can be, not a person`);
     if (!u.name || u.token.length < 24)
       throw new Error(`OURLEADS_USERS.${u.id} needs a name and a token of at least 24 characters`);
@@ -81,13 +88,14 @@ export function users(): User[] {
 }
 
 /**
- * The WhatsApp chats leads arrive from. Each entry names the partner on the
- * other end and the trades that are theirs — the split Dudu set on 2026-10-05:
- * building and facade work goes to Basis, pigeons and windows to סנפלינג ישראל.
+ * Where a lead belongs: Yaniv's two lines of work, under his brand ג.ח. פרוייקטים —
+ * work at height, and pigeons and windows (the same split as the business line's
+ * alert groups, lib/cloud.ts LINES). Shown as the board's source filter.
  *
- * "ישראל" here is part of a business name, not a person: nobody called Israel
- * is in this partnership. So a source carries an explicit `actor` (the name an
- * event is signed with) instead of taking the first word of `partner`.
+ * Each one is also a WhatsApp chat leads used to arrive from — Dudu's two businesses,
+ * בסיס and סנפלינג ישראל — so `partner` and `actor` still describe who is on the other
+ * end there, for the extractor and the timeline. Dudu left on 2026-10-10 and the
+ * business line's assistant took over his part; the ids stay because leads carry them.
  */
 export interface Source {
   id: string;
@@ -104,7 +112,7 @@ export const SOURCES: Source[] = [
   {
     id: "basis",
     jid: "972533325272@s.whatsapp.net",
-    label: "בסיס",
+    label: "ג.ח. עבודות גובה",
     partner: "דודו (בסיס עבודות בגובה)",
     actor: "דודו",
     trades: "שיפוץ מעטפת: שיקום בטון, איטום קירות חיצוניים, חיזוק אריחים, צביעה, מרזבים, אינסטלציה חיצונית, תליית שלטים, פירוק אנטנות וכל עבודה בגובה סביב הבניין",
@@ -112,7 +120,7 @@ export const SOURCES: Source[] = [
   {
     id: "israel",
     jid: "972525407778@s.whatsapp.net",
-    label: "סנפלינג ישראל",
+    label: "ג.ח. יונים וחלונות",
     partner: "העסק סנפלינג ישראל (שם של חברה, לא של אדם)",
     actor: "סנפלינג ישראל",
     trades: "הרחקת יונים וניקוי חלונות",
@@ -121,7 +129,7 @@ export const SOURCES: Source[] = [
 
 /**
  * Where a shared lead card is opened. Always prod, even when the link is made on
- * dev: the card goes to people who have no dev access (Dudu, a subcontractor),
+ * dev: the card goes to people who have no dev access (a subcontractor),
  * and both servers read the one shared board, so the token is valid on either.
  */
 export const CARD_ORIGIN = "https://our-leads.prod.ya-niv.com";
@@ -142,20 +150,17 @@ export interface BridgeConfig {
 
 /**
  * Where lead text (one card, or the report of every open lead — lib/cardText.ts)
- * can be sent. Dudu does not open links on his phone, so the details have to be
- * readable in the chat itself.
+ * can be sent, readable in the chat itself — no link to open.
  *
- * - `preview`: Yaniv's own group "קבוצה ריקה". Read it there first, forward or
- *   send for real once it is right.
- * - `dudu`: Dudu's private chat — sent from Yaniv's own number, in his name. The
- *   app asks for a second tap before this one.
+ * - `preview`: Yaniv's own group "קבוצה ריקה". Read it there first, then forward
+ *   it to whoever needs it (a subcontractor).
  *
+ * Dudu's chat was the second target until he left (2026-10-10).
  * Nobody else: a message in someone's chat is Yaniv's word, so each recipient is
  * a decision written here, not a phone number typed into a form.
  */
 export const TEXT_TARGETS = {
   preview: { jid: "120363427371815253@g.us", label: "קבוצה ריקה" },
-  dudu: { jid: "972533325272@s.whatsapp.net", label: "דודו" },
 } as const;
 export type TextTarget = keyof typeof TEXT_TARGETS;
 export const isTextTarget = (v: unknown): v is TextTarget => typeof v === "string" && Object.hasOwn(TEXT_TARGETS, v);

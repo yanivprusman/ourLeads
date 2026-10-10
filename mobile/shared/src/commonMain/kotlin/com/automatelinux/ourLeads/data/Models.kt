@@ -99,6 +99,20 @@ data class Deal(
 @Serializable
 data class Me(val id: String, val name: String)
 
+/**
+ * Busy mode for the business line: busy = the assistant answers customers for us
+ * while we are on a job. [configured] = the line is connected to Meta.
+ */
+@Serializable
+data class AssistantState(
+    val id: String = "assistant",
+    val name: String = "העוזר",
+    val configured: Boolean = false,
+    val busy: Boolean = false,
+    val at: String? = null,
+    val by: String? = null,
+)
+
 @Serializable
 data class StatusDef(val id: String, val label: String)
 
@@ -114,6 +128,8 @@ data class BoardData(
     val people: List<Me> = emptyList(),
     /** The ball's third place — the customer's hands. */
     val customer: Me = Me("customer", "הלקוח"),
+    /** The business line's assistant: a place the ball can be, and the busy switch. */
+    val assistant: AssistantState = AssistantState(),
     val leads: List<Lead>,
     val unassigned: List<Msg> = emptyList(),
     val pending: Int = 0,

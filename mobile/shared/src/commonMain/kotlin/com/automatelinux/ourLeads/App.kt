@@ -18,6 +18,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -125,8 +126,8 @@ private fun tone(s: String): Tone = when (s) {
     "work" -> Tone(WorkRed, WorkSoft, WorkInk)
     else -> Tone(Color(0xFFD4DBE2), Color(0xFFF3F5F7), Color(0xFF8A9AAB))
 }
-private fun partnerColor(src: String) = if (src == "israel") Israel else Basis
-private fun partnerInitial(src: String) = if (src == "israel") "י" else "ב"
+private fun partnerColor(src: String) = when (src) { "israel" -> Israel; "business" -> Harbour; else -> Basis }
+private fun partnerInitial(src: String) = when (src) { "israel" -> "י"; "business" -> "ע"; else -> "ג" }
 
 private val LocalApi = staticCompositionLocalOf<OurLeadsApi> { error("no api") }
 private val LocalDockBottom = staticCompositionLocalOf { 12.dp }
@@ -260,7 +261,7 @@ private fun BoardScreen() {
                 }
             }
         } else {
-            LeadList(d, error, view, source, balls, mode, onView = { view = it }, onSource = { source = it }, onBalls = { balls = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null })
+            LeadList(d, error, view, source, balls, mode, onView = { view = it }, onSource = { source = it }, onBalls = { balls = it }, onMode = { mode = it }, onOpen = { openId = it }, onReply = { reply = it; talkError = null; tick++ }, onError = { talkError = it; reply = null }, onChanged = { tick++ })
             AnimatedVisibility(
                 reply != null, Modifier.align(Alignment.BottomCenter),
                 enter = slideInVertically { it / 2 } + fadeIn(), exit = fadeOut(),
@@ -295,8 +296,9 @@ private fun BoardScreen() {
 private fun LeadList(
     d: BoardData, error: String?, view: String, source: String, balls: Set<String>, mode: String,
     onView: (String) -> Unit, onSource: (String) -> Unit, onBalls: (Set<String>) -> Unit, onReply: (CommandReply) -> Unit, onError: (String) -> Unit, onMode: (String) -> Unit, onOpen: (Int) -> Unit,
+    onChanged: () -> Unit,
 ) {
-    val inSource = d.leads.filter { (source == "all" || it.source == source) && (balls.isEmpty() || balls.any { b -> when (b) { NOBODY -> it.holder == null; d.customer.id -> it.holder == b; else -> it.holder == b || it.checkBackDue } }) }
+    val inSource = d.leads.filter { (source == "all" || it.source == source) && (balls.isEmpty() || balls.any { b -> when (b) { NOBODY -> it.holder == null; d.customer.id, d.assistant.id -> it.holder == b; else -> it.holder == b || it.checkBackDue } }) }
     var touchedFirst by rememberBoolPref("board_touched_first", false)
     val shown = inSource.filter { if (view == "open") it.status !in CLOSED else it.status == view }
     // "נגיעה אחרונה" is opt-in: whatever was last edited, messaged or noted goes to the top.
@@ -324,20 +326,24 @@ private fun LeadList(
                     Modifier.clip(CircleShape).background(Color.White.copy(alpha = .12f)).clickable { reporting = true }.padding(horizontal = 12.dp, vertical = 7.dp),
                 )
             }
-            // Leads / calendar
-            Row(Modifier.padding(start = 18.dp, top = 16.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp)) {
-                listOf("leads" to "לידים", "calendar" to "יומן").forEach { (id, label) ->
-                    val sel = id == mode
-                    T(
-                        label, 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) Color.White else Color.White.copy(alpha = .82f),
-                        Modifier.clip(CircleShape).background(if (sel) Amber else Color.Transparent)
-                            .clickable { onMode(id) }.padding(horizontal = 16.dp, vertical = 7.dp),
-                    )
+            // Leads / calendar, and the assistant's busy switch
+            Row(Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp)) {
+                    listOf("leads" to "לידים", "calendar" to "יומן").forEach { (id, label) ->
+                        val sel = id == mode
+                        T(
+                            label, 14, if (sel) FontWeight.Bold else FontWeight.Normal, if (sel) Color.White else Color.White.copy(alpha = .82f),
+                            Modifier.clip(CircleShape).background(if (sel) Amber else Color.Transparent)
+                                .clickable { onMode(id) }.padding(horizontal = 16.dp, vertical = 7.dp),
+                        )
+                    }
                 }
+                Spacer(Modifier.weight(1f))
+                BusySwitch(d.assistant, onChanged)
             }
-            // Partner switch
+            // Source switch — the brands; scrolls when the names do not fit
             Row(
-                Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
+                Modifier.padding(start = 18.dp, top = 8.dp).horizontalScroll(rememberScrollState()).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
             ) {
                 (listOf(SourceDef("all", "כולם", "")) + d.sources).forEach { s ->
                     val sel = s.id == source
@@ -352,7 +358,7 @@ private fun LeadList(
             if (d.people.isNotEmpty()) Row(
                 Modifier.padding(start = 18.dp, top = 8.dp).clip(CircleShape).background(Color.White.copy(alpha = .1f)).padding(4.dp),
             ) {
-                (listOf("all" to "הכל") + d.people.map { it.id to holderLabel(d, it.id) } + (d.customer.id to holderLabel(d, d.customer.id)) + (NOBODY to "אצל אף אחד")).forEach { (id, label) ->
+                (listOf("all" to "הכל") + d.people.map { it.id to holderLabel(d, it.id) } + (d.assistant.id to holderLabel(d, d.assistant.id)) + (d.customer.id to holderLabel(d, d.customer.id)) + (NOBODY to "אצל אף אחד")).forEach { (id, label) ->
                     val sel = if (id == "all") balls.isEmpty() else id in balls
                     T(
                         label, 14, if (sel) FontWeight.SemiBold else FontWeight.Normal, if (sel) Ink else Color.White.copy(alpha = .82f),
@@ -898,7 +904,6 @@ private fun LeadScreen(d: BoardData, l: Lead, onBack: () -> Unit, onChanged: () 
     }
 }
 
-/** "אצלי" for the person holding the phone, "אצל דודו" for anyone else. */
 /**
  * Send this lead's card as a link that opens the one lead with no sign-in. The card
  * is full unless something is ticked off; the server keeps the choice with the link.
@@ -980,56 +985,41 @@ private fun ShareDialog(l: Lead, onDismiss: () -> Unit, onShared: () -> Unit) {
 }
 
 /**
- * The two places lead text goes (server: lib/config.ts TEXT_TARGETS): the preview
- * group "קבוצה ריקה" to read it first, and Dudu. Sending to Dudu is in Yaniv's name
- * in a real chat, so the first tap only arms it (it disarms after 4 s) and the
- * second sends. [send] returns an error message, or null when sent. A new
- * [resetKey] (e.g. what to hide) clears the "sent ✓" marks — it would be a new message.
+ * Where lead text goes (server: lib/config.ts TEXT_TARGETS): the preview group
+ * "קבוצה ריקה", to read it there and forward it to whoever needs it. Dudu's chat
+ * was the second target until he left (2026-10-10). [send] returns an error
+ * message, or null when sent. A new [resetKey] (e.g. what to hide) clears the
+ * "sent ✓" mark — it would be a new message.
  */
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun SendTextButtons(what: String, resetKey: String = "", send: suspend (to: String) -> String?) {
     val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf<String?>(null) }
-    var sent by remember(resetKey) { mutableStateOf(setOf<String>()) }
-    var armed by remember(resetKey) { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var sent by remember(resetKey) { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(armed) { if (armed) { kotlinx.coroutines.delay(4000); armed = false } }
-    fun go(to: String) {
-        if (to == "dudu" && !armed) { armed = true; return }
-        armed = false
-        busy = to
-        error = null
-        scope.launch {
-            val err = send(to)
-            busy = null
-            if (err != null) error = err else sent = sent + to
-        }
-    }
     Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                { go("preview") }, enabled = busy == null, modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
-            ) { Text(if (busy == "preview") "שולח…" else if ("preview" in sent) "בקבוצה ריקה ✓" else "לקבוצה ריקה (בדיקה)", color = Harbour, fontSize = 13.sp, textAlign = TextAlign.Center) }
-            Button(
-                { go("dudu") }, enabled = busy == null, modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = if (armed) Amber else Israel),
-            ) {
-                Text(
-                    when { busy == "dudu" -> "שולח…"; armed -> "לחצו שוב לשליחה"; "dudu" in sent -> "נשלח לדודו ✓"; else -> "שלח את $what לדודו" },
-                    color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
-                )
-            }
-        }
-        T("הפרטים עצמם בתוך ההודעה, בלי קישור. לדודו — מהמספר שלך, בצ׳אט שלכם.", 12, color = Muted, modifier = Modifier.padding(top = 4.dp))
+        OutlinedButton(
+            {
+                busy = true
+                error = null
+                scope.launch {
+                    val err = send("preview")
+                    busy = false
+                    if (err != null) error = err else sent = true
+                }
+            },
+            enabled = !busy, modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
+        ) { Text(if (busy) "שולח…" else if (sent) "בקבוצה ריקה ✓" else "לקבוצה ריקה", color = Harbour, fontSize = 13.sp, textAlign = TextAlign.Center) }
+        T("הפרטים עצמם בתוך ההודעה, בלי קישור — משם מעבירים למי שצריך.", 12, color = Muted, modifier = Modifier.padding(top = 4.dp))
         error?.let { T(it, 13, color = Danger, modifier = Modifier.padding(top = 6.dp)) }
     }
 }
 
 /**
  * The report of every open lead, exactly as the server will send it: read it here,
- * send it to the preview group to see it as Dudu will, then send it to Dudu.
+ * send it to the preview group and forward it from there.
  */
 @Composable
 private fun ReportDialog(onDismiss: () -> Unit) {
@@ -1189,6 +1179,52 @@ private fun HeaderClear() {
     )
 }
 
+/**
+ * Busy mode for the business line (the web's BusyToggle). On: the assistant answers
+ * customers for us, as our assistant, while we are on a job. Off: it stays quiet and
+ * we answer. It stays where it is set — there is no timer.
+ */
+@Composable
+private fun BusySwitch(a: AssistantState, onChanged: () -> Unit) {
+    val api = LocalApi.current
+    val scope = rememberCoroutineScope()
+    // What was tapped, until the board reloads with it; null = show the server's state.
+    var pending by remember { mutableStateOf<Boolean?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(a.busy) { pending = null }
+    LaunchedEffect(error) { if (error != null) { delay(6000); error = null } }
+    val on = pending ?: a.busy
+    val knob by animateDpAsState(if (on) 18.dp else 2.dp)
+    Row(
+        Modifier.clip(CircleShape).background(if (error != null) Color(0xFFFDE8E8) else if (on) Amber else Color.White.copy(alpha = .12f))
+            .clickable(enabled = pending == null) {
+                val next = !on
+                pending = next
+                error = null
+                scope.launch {
+                    when (val r = api.setBusy(next)) {
+                        is Result.Ok -> onChanged()
+                        is Result.Err -> { pending = null; error = r.message }
+                    }
+                }
+            }.padding(start = 6.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(width = 36.dp, height = 20.dp).clip(CircleShape).background(if (on) Ink.copy(alpha = .25f) else Color.White.copy(alpha = .25f))) {
+            Box(Modifier.padding(start = knob, top = 2.dp).size(16.dp).clip(CircleShape).background(Color.White))
+        }
+        Spacer(Modifier.width(8.dp))
+        T(
+            when {
+                error != null -> "השינוי נכשל"
+                on -> "עסוק · העוזר עונה"
+                else -> "זמין"
+            },
+            13, FontWeight.SemiBold, if (error != null) Danger else if (on) Ink else Color.White,
+        )
+    }
+}
+
 /** Delete for everyone every message the app put in קבוצה ריקה. Two taps. */
 @Composable
 private fun ClearPreview(onDone: () -> Unit = {}) {
@@ -1234,6 +1270,7 @@ private const val NOBODY = "nobody"
 
 private fun holderLabel(d: BoardData, id: String): String = when (id) {
     d.customer.id -> "אצל ${d.customer.name}"
+    d.assistant.id -> "אצל ${d.assistant.name}"
     d.me.id -> "אצלי"
     else -> "אצל ${d.people.firstOrNull { it.id == id }?.name ?: id}"
 }
@@ -1245,7 +1282,8 @@ private fun daysFromToday(days: Int): String =
 /**
  * Whose move it is. Passing the ball says "I've done my part — it's yours until you
  * pass it back". It is separate from the status: a lead at פגישה can be in either hands.
- * The customer is the third place: we wait for him until a day, then it is both partners' move.
+ * The assistant (the business line) can hold it too, and the customer: we wait for him
+ * until a day, then it is both partners' move.
  */
 @Composable
 private fun HolderPicker(d: BoardData, l: Lead, busy: Boolean, onCheckBack: (String) -> Unit, onPass: (String?) -> Unit) {
@@ -1255,7 +1293,7 @@ private fun HolderPicker(d: BoardData, l: Lead, busy: Boolean, onCheckBack: (Str
                 T("הכדור אצל", 14, FontWeight.SemiBold, Ink2, Modifier.padding(horizontal = 6.dp))
                 Spacer(Modifier.width(6.dp))
                 Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Paper).padding(4.dp)) {
-                    (d.people.map { it.id to it.name } + (d.customer.id to d.customer.name) + (null to "אף אחד")).forEach { (id, name) ->
+                    (d.people.map { it.id to it.name } + (d.assistant.id to d.assistant.name) + (d.customer.id to d.customer.name) + (null to "אף אחד")).forEach { (id, name) ->
                         val sel = id == l.holder
                         val on = when (id) { null -> Color.White; d.customer.id -> Amber; else -> Harbour }
                         Box(

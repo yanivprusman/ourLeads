@@ -1,11 +1,11 @@
 import "server-only";
-import { CUSTOMER, SOURCES, users } from "./config";
+import { ASSISTANT, CUSTOMER, SOURCES, users } from "./config";
 import { STATUSES, STATUS_LABELS, customerDue, getDb, statusLabel, type EventRow, type LeadRow, type MessageRow } from "./db";
 import { mediaSig } from "./auth";
 import { posterName } from "./poster";
 import { partnership } from "./partnership";
 import { describeProposal, readProposal } from "./proposal";
-import { ASSISTANT, BUSINESS_SOURCE, busyState, windowOpenUntil } from "./assistant";
+import { BUSINESS_SOURCE, busyState, windowOpenUntil } from "./assistant";
 import { cloudConfigured, isBusinessJid } from "./cloud";
 
 /** The board as both clients read it: one payload, small enough to send whole. */
@@ -22,9 +22,9 @@ export function messageView(m: MessageRow) {
     /** Written by the customer himself, in his own chat (lib/customerChats.ts) or on the business line (lib/assistant.ts). */
     fromCustomer: (m.source === "customer" || m.source === BUSINESS_SOURCE.id) && !m.from_me,
     /** Business line, from_me: written by the assistant, not by one of us. */
-    byAssistant: !!m.from_me && m.written_by === ASSISTANT,
+    byAssistant: !!m.from_me && m.written_by === ASSISTANT.id,
     /** Business line, from_me by hand: which of us wrote it. */
-    writtenBy: m.from_me && m.written_by !== ASSISTANT ? m.written_by : null,
+    writtenBy: m.from_me && m.written_by !== ASSISTANT.id ? m.written_by : null,
     sentAt: m.sent_at,
     content: m.content,
     mediaType: m.media_type,
@@ -142,7 +142,7 @@ export function board(me: { id: string; name: string }) {
     statuses: STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s] })),
     sources: [...SOURCES, BUSINESS_SOURCE].map((s) => ({ id: s.id, label: s.label, actor: s.actor })),
     /** The business line's assistant: whether the line is set up, and whether it is answering for us (busy). */
-    assistant: { configured: cloudConfigured(), ...busyState() },
+    assistant: { ...ASSISTANT, configured: cloudConfigured(), ...busyState() },
     /** Who the ball can be passed to. */
     people: users().map((u) => ({ id: u.id, name: u.name })),
     /** The ball's third place: the customer's hands (not one of `people`). */

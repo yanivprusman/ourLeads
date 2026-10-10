@@ -483,7 +483,7 @@ export function customerDue(l: Pick<LeadRow, "holder" | "check_back_at">): boole
 
 /**
  * Pass the ball: the lead is now in `holder`'s hands until they pass it back.
- * Logged as "הכדור: יניב ← דודו" so the history says who handed it over and when.
+ * Logged as "הכדור: יניב ← העוזר" so the history says who handed it over and when.
  *
  * `holder.id === "customer"` means we wait for him until `checkBack` (default: CUSTOMER_DAYS
  * from today); then it is both partners' move. Passing it to the customer again only moves the date.

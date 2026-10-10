@@ -6,8 +6,7 @@ import RecentSends from "./RecentSends";
 import ClearPreview from "./ClearPreview";
 
 /**
- * Send this lead's card to someone outside the board — Dudu before he uses the
- * app, a subcontractor, anyone — as a link that opens the one lead with no
+ * Send this lead's card to someone outside the board — a subcontractor, anyone — as a link that opens the one lead with no
  * sign-in. Everything is in it unless ticked off here; the server stores the
  * choice with the link, so the receiver cannot undo it.
  */

@@ -7,7 +7,7 @@ const heebo = Heebo({ subsets: ["hebrew", "latin"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
   title: "ourLeads",
-  description: "לידים מדודו (בסיס) ומסנפלינג ישראל — לוח משותף, עדכון סטטוס בקול",
+  description: "לידים של ג.ח. פרוייקטים — עבודות גובה, יונים וחלונות — עם עוזר שעונה ללקוחות, עדכון סטטוס בקול",
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#1f5f8b" };

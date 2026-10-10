@@ -304,13 +304,14 @@ export default function LeadDetail({
 
           {/* Whose move it is. Passing the ball says "I've done my part — it's yours until
               you pass it back". Separate from the status: a lead at פגישה can be in either hands.
-              The customer is the third place: we wait for him until a day, then it is both partners' move. */}
+              The assistant (the business line) can hold it too, and the customer: we wait for him until a day,
+              then it is both partners' move. */}
           {data.people.length > 0 && (
             <div className="bg-white rounded-2xl border border-line p-3 space-y-2.5">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-ink-2 px-1">הכדור אצל</span>
-                <div className="flex-1 grid gap-1 rounded-xl bg-paper p-1" style={{ gridTemplateColumns: `repeat(${data.people.length + 2}, minmax(0, 1fr))` }}>
-                  {[...data.people, data.customer, { id: null, name: "אף אחד" }].map((p) => (
+                <div className="flex-1 grid gap-1 rounded-xl bg-paper p-1" style={{ gridTemplateColumns: `repeat(${data.people.length + 3}, minmax(0, 1fr))` }}>
+                  {[...data.people, data.assistant, data.customer, { id: null, name: "אף אחד" }].map((p) => (
                     <button
                       key={p.id ?? "nobody"}
                       data-id={`lead-holder-${p.id ?? "nobody"}`}

@@ -91,7 +91,7 @@ export default function Board() {
   }, [load]);
 
   const inSource = useMemo(
-    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (!balls.length || balls.some((b) => (b === NOBODY ? !l.holder : b === data?.customer.id ? l.holder === b : onPlate(l, b))))),
+    () => (data?.leads ?? []).filter((l) => (source === "all" || l.source === source) && (!balls.length || balls.some((b) => (b === NOBODY ? !l.holder : b === data?.customer.id || b === data?.assistant.id ? l.holder === b : onPlate(l, b))))),
     [data, source, balls],
   );
   const counts = useMemo(() => {
@@ -181,7 +181,7 @@ export default function Board() {
             ))}
           </div>
           <div className="inline-flex rounded-full bg-white/10 p-1 text-sm">
-            {[{ id: "all", label: "הכל" }, ...data.people.map((p) => ({ id: p.id, label: holderLabel(data, p.id) })), { id: data.customer.id, label: holderLabel(data, data.customer.id) }, { id: NOBODY, label: "אצל אף אחד" }].map((p) => (
+            {[{ id: "all", label: "הכל" }, ...data.people.map((p) => ({ id: p.id, label: holderLabel(data, p.id) })), { id: data.assistant.id, label: holderLabel(data, data.assistant.id) }, { id: data.customer.id, label: holderLabel(data, data.customer.id) }, { id: NOBODY, label: "אצל אף אחד" }].map((p) => (
               <BallChip
                 key={p.id}
                 id={p.id}

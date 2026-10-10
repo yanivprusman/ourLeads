@@ -23,7 +23,7 @@ export const DEAL_KEYS = ["client_price", "client_vat", "sub_name", "sub_phone",
 
 export const MONEY_KEYS = ["materials", "executor", "work_days", "closed_at", "paid_at", "collected_by", "settled_at"] as const;
 
-/** "חלוקה: מבצע יניב, 2 ימי עבודה, חומרים ₪500 · נסגר 6.10 · שולם 9.10 לדודו" — one history line per change. */
+/** "חלוקה: מבצע יניב, 2 ימי עבודה, חומרים ₪500 · נסגר 6.10 · שולם 9.10 ליניב" — one history line per change. */
 export function describeMoney(l: LeadRow, name: (id: string) => string): string {
   const parts: string[] = [];
   const work: string[] = [];

@@ -2,7 +2,7 @@ import "server-only";
 import path from "node:path";
 import { askJson } from "./claude";
 import { sendText } from "./bridge";
-import { CARD_ORIGIN, dataDir } from "./config";
+import { ASSISTANT, CARD_ORIGIN, dataDir } from "./config";
 import {
   BUSINESS_SUFFIX,
   businessJid,
@@ -39,9 +39,6 @@ import { transcribe } from "./transcribe";
  */
 export const BUSINESS_SOURCE = { id: "business", label: "העסק", actor: "לקוח" } as const;
 
-/** The assistant's name on the timeline and in the chat's history. */
-export const ASSISTANT = "assistant";
-const ASSISTANT_LABEL = "העוזר";
 
 /** A customer writes in bursts too — a photo, then the address — but a person is waiting, so the wait is short. */
 const QUIET_MS = 40_000;
@@ -157,7 +154,7 @@ function leadFor(jid: string): LeadRow | undefined {
 
 function who(m: MessageRow, customer: string): string {
   if (!m.from_me) return customer;
-  return m.written_by === ASSISTANT ? ASSISTANT_LABEL : (m.written_by ?? OWNER);
+  return m.written_by === ASSISTANT.id ? ASSISTANT.name : (m.written_by ?? OWNER);
 }
 
 function describe(m: MessageRow, customer: string): string {
@@ -177,7 +174,7 @@ export function hasPrice(text: string): boolean {
 }
 
 function buildPrompt(lead: LeadRow | undefined, history: MessageRow[], fresh: MessageRow[], customer: string, busy: boolean): string {
-  const spokeBefore = history.some((m) => m.from_me && m.written_by === ASSISTANT && Date.now() - new Date(m.sent_at).getTime() < 12 * 60 * 60_000);
+  const spokeBefore = history.some((m) => m.from_me && m.written_by === ASSISTANT.id && Date.now() - new Date(m.sent_at).getTime() < 12 * 60 * 60_000);
   return `אתה העוזר של ${OWNER}, קבלן עבודות גובה (סנפלינג): איטום, שיקום בטון, ניקוי חזיתות וחלונות בגובה, רשתות והרחקת יונים, פירוק אנטנות ועוד.
 זה הקו העסקי שלו בוואטסאפ. כותבים אליו לקוחות מהאתר ומהמודעות.
 ${todayLine()}
@@ -295,15 +292,15 @@ async function handle(jid: string, fresh: MessageRow[], log: Log): Promise<void>
   const reply = a.reply?.trim();
   if (busy && reply && a.customer !== "no") {
     if (hasPrice(reply)) {
-      if (leadId) addEvent(leadId, ASSISTANT_LABEL, "note", `לא נשלח ללקוח כי הזכיר מחיר: ״${reply}״`);
+      if (leadId) addEvent(leadId, ASSISTANT.name, "note", `לא נשלח ללקוח כי הזכיר מחיר: ״${reply}״`);
       log(`business ${jid}: reply held back (names a price)`);
     } else {
       // The lead is already saved; a failed send must not undo it, and must not pass silently either.
       try {
-        await sendAndStore(jid, reply, ASSISTANT, leadId);
+        await sendAndStore(jid, reply, ASSISTANT.id, leadId);
         log(`business ${jid}: assistant answered`);
       } catch (e) {
-        if (leadId) addEvent(leadId, ASSISTANT_LABEL, "note", `התשובה ללקוח לא נשלחה (${(e as Error).message}): ״${reply}״`);
+        if (leadId) addEvent(leadId, ASSISTANT.name, "note", `התשובה ללקוח לא נשלחה (${(e as Error).message}): ״${reply}״`);
         log(`business ${jid}: reply failed:`, (e as Error).message);
       }
     }

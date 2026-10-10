@@ -1,7 +1,7 @@
 import "server-only";
 import path from "node:path";
 import { messagesSince, downloadMedia } from "./bridge";
-import { CUSTOMER, SOURCES, Source, dataDir, ingestSince, users } from "./config";
+import { ASSISTANT, CUSTOMER, SOURCES, Source, dataDir, ingestSince, users } from "./config";
 import { askJson } from "./claude";
 import { cleanDate, cleanDateTime, describeCalendar, describeDeal, sayWhen, todayLine } from "./deal";
 import { transcribe } from "./transcribe";
@@ -210,7 +210,7 @@ export function describeLeads(): string {
         (l.meeting_at ? ` | פגישה: ${sayWhen(l.meeting_at)}` : l.visit_at ? ` | ביקור: ${l.visit_at}` : "") +
         (l.work_start ? ` | עבודה: ${sayWhen(l.work_start)}${l.work_end && l.work_end !== l.work_start ? `–${sayWhen(l.work_end)}` : ""}` : "") +
         (l.next_step ? ` | הבא: ${l.next_step}` : "") +
-        (l.holder ? ` | אצל: ${[...people, CUSTOMER].find((u) => u.id === l.holder)?.name ?? l.holder}` : "") +
+        (l.holder ? ` | אצל: ${[...people, ASSISTANT, CUSTOMER].find((u) => u.id === l.holder)?.name ?? l.holder}` : "") +
         (l.holder === CUSTOMER.id && l.check_back_at ? ` | בודקים איתו: ${sayWhen(l.check_back_at)}` : "") +
         (l.client_price != null || l.sub_price != null || l.sub_name ? ` | ${describeDeal(l)}` : "");
     })

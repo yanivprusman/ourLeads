@@ -28,11 +28,11 @@ export async function GET(request: Request) {
   });
 }
 
-/** Send the report as WhatsApp text. `{ to: "preview" | "dudu", ids?: [1, 2] }` */
+/** Send the report as WhatsApp text. `{ to: "preview", ids?: [1, 2] }` */
 export async function POST(request: Request) {
   return asUser(request, async (user) => {
     const body = (await request.json().catch(() => ({}))) as { to?: unknown; ids?: unknown };
-    if (!isTextTarget(body.to)) return NextResponse.json({ error: 'to must be "preview" or "dudu"' }, { status: 400 });
+    if (!isTextTarget(body.to)) return NextResponse.json({ error: 'to must be "preview"' }, { status: 400 });
     const ids = parseIds(body.ids);
     if (ids === null) return NextResponse.json({ error: "ids must be a list of lead numbers" }, { status: 400 });
     try {

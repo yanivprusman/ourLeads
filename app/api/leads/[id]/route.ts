@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asUser } from "@/lib/http";
 import { addEvent, getLead, isStatus, logFieldEdits, setHolder, updateLead, type LeadPatch } from "@/lib/db";
-import { CUSTOMER, users } from "@/lib/config";
+import { ASSISTANT, CUSTOMER, users } from "@/lib/config";
 import { CALENDAR_KEYS, DEAL_KEYS, MONEY_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal, describeMoney } from "@/lib/deal";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/leads/[id]
     if (body.status !== undefined && !isStatus(body.status))
       return NextResponse.json({ error: "unknown status" }, { status: 400 });
     const people = users();
-    const ballTo = [...people, CUSTOMER];
+    const ballTo = [...people, ASSISTANT, CUSTOMER];
     // A new check-back date on its own means "give the customer until then" — the ball is his.
     const checkBack = "checkBackAt" in body ? cleanDate(body.checkBackAt) : null;
     if ("checkBackAt" in body && !checkBack) return NextResponse.json({ error: "checkBackAt must be YYYY-MM-DD" }, { status: 400 });

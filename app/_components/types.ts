@@ -133,12 +133,13 @@ export interface BoardData {
   unassigned: Msg[];
   pending: number;
   /** The business line's assistant. busy = it answers customers for us. */
-  assistant: { configured: boolean; busy: boolean; at: string | null; by: string | null };
+  assistant: { id: string; name: string; configured: boolean; busy: boolean; at: string | null; by: string | null };
 }
 
-/** "אצלי" for whoever is looking, "אצל דודו" for anyone else, "אצל הלקוח" while we wait for him. */
+/** "אצלי" for whoever is looking, "אצל העוזר" while the assistant has it, "אצל הלקוח" while we wait for him. */
 export function holderLabel(data: BoardData, id: string): string {
   if (id === data.customer.id) return `אצל ${data.customer.name}`;
+  if (id === data.assistant.id) return `אצל ${data.assistant.name}`;
   return id === data.me.id ? "אצלי" : `אצל ${data.people.find((p) => p.id === id)?.name ?? id}`;
 }
 
@@ -176,7 +177,7 @@ export const STATUS_TONE: Record<string, { dot: string; pill: string; rail: stri
 };
 
 export const PARTNER_TONE: Record<string, { chip: string; initial: string }> = {
-  basis: { chip: "bg-basis text-white", initial: "ב" },
+  basis: { chip: "bg-basis text-white", initial: "ג" },
   israel: { chip: "bg-israel text-white", initial: "י" },
   business: { chip: "bg-harbour text-white", initial: "ע" },
 };

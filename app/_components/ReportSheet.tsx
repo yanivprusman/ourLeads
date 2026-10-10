@@ -6,9 +6,9 @@ import ClearPreview from "./ClearPreview";
 
 /**
  * The report as WhatsApp text (lib/cardText.ts reportText): pick which leads go
- * in (all by default), read it here, send it to the preview group to see it as
- * Dudu will, then send it to Dudu. What is shown is exactly what is sent — the
- * server builds both from the same selection.
+ * in (all by default), read it here, send it to the preview group and forward it
+ * from there. What is shown is exactly what is sent — the server builds both from
+ * the same selection.
  */
 interface Choice {
   id: number;

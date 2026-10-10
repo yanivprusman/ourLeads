@@ -1,21 +1,21 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { dbquery, revokeText, sendText } from "./bridge";
-import { CUSTOMER, TEXT_TARGETS, users, type TextTarget } from "./config";
+import { ASSISTANT, CUSTOMER, TEXT_TARGETS, users, type TextTarget } from "./config";
 import { money, sayWhen } from "./deal";
 import { CLOSED, addEvent, customerDue, getDb, israelToday, now, type LeadRow } from "./db";
 import { leadCard, type Hideable, type LeadCard, HIDE_LABELS, effectiveHide } from "./shares";
 
 /**
- * Leads as plain WhatsApp text — for Dudu, who reads what is in the chat and
- * does not open links on his phone. Two shapes:
+ * Leads as plain WhatsApp text — for someone who reads what is in the chat and
+ * does not open links on his phone (a subcontractor). Two shapes:
  *
  * - **a card**: one lead, everything its link page holds minus the photos, with
  *   the same fields hidden the same way;
  * - **the report**: every open lead, short, grouped by whose move it is.
  *
- * Either goes to a `TEXT_TARGETS` chat: the preview group first, Dudu once it
- * reads right (sent from the app, or forwarded by hand from the group).
+ * Either goes to a `TEXT_TARGETS` chat — the preview group — and is forwarded by
+ * hand from there.
  *
  * Text that reaches a partner chat is read back by the ingest, where the names,
  * phones and addresses in it would be extracted as new leads. So every message
@@ -49,7 +49,7 @@ function at(iso: string): string {
 }
 
 function holderName(id: string): string {
-  return users().find((u) => u.id === id)?.name ?? id;
+  return [...users(), ASSISTANT].find((u) => u.id === id)?.name ?? id;
 }
 
 function ball(holder: string | null, checkBackAt: string | null): string | null {
@@ -125,21 +125,21 @@ function reportLeads(): LeadRow[] {
 export interface ReportChoice {
   id: number;
   title: string;
-  /** The group it is listed under ("אצל דודו"…). */
+  /** The group it is listed under ("אצל העוזר"…). */
   group: string;
 }
 
 export function reportText(only?: number[]): { parts: string[]; leadIds: number[]; choices: ReportChoice[] } {
   const open = reportLeads();
   const allGroups: { title: string; leads: LeadRow[] }[] = [
-    ...users().map((u) => ({ title: `אצל ${u.name}`, leads: open.filter((l) => l.holder === u.id) })),
+    ...[...users(), ASSISTANT].map((u) => ({ title: `אצל ${u.name}`, leads: open.filter((l) => l.holder === u.id) })),
     {
       title: `אצל ${CUSTOMER.name}`,
       leads: open
         .filter((l) => l.holder === CUSTOMER.id)
         .sort((a, b) => Number(customerDue(b)) - Number(customerDue(a)) || (a.check_back_at ?? "").localeCompare(b.check_back_at ?? "")),
     },
-    { title: "עוד לא אצל אף אחד", leads: open.filter((l) => !l.holder || (l.holder !== CUSTOMER.id && !users().some((u) => u.id === l.holder))) },
+    { title: "עוד לא אצל אף אחד", leads: open.filter((l) => !l.holder || (l.holder !== CUSTOMER.id && ![...users(), ASSISTANT].some((u) => u.id === l.holder))) },
   ].filter((g) => g.leads.length);
   // Every open lead, as the picker lists it; then the report keeps only those chosen.
   const choices = allGroups.flatMap((g) => g.leads.map((l) => ({ id: l.id, title: l.title, group: g.title })));
@@ -207,7 +207,7 @@ export async function sendCardText(leadId: number, hide: Hideable[], who: string
 
 /**
  * Send the report of every open lead. To the preview group it is a draft and
- * touches no lead; to Dudu, each lead in it gets a line in its history.
+ * touches no lead; to any other target, each lead in it gets a line in its history.
  */
 export async function sendReport(who: string, target: TextTarget, only?: number[]): Promise<{ to: string; messages: number; leads: number }> {
   const { parts, leadIds } = reportText(only);
@@ -266,7 +266,7 @@ export function deletableSends(leadId?: number): SentBatch[] {
 
 /**
  * Delete a send for everyone — every message in it. Logged on the leads it was
- * logged on when sent (a card anywhere, a report to Dudu); a report to the
+ * logged on when sent (a card anywhere, a report to a real chat); a report to the
  * preview group touched no lead and its deletion touches none either.
  */
 export async function deleteSend(batch: string, who: string): Promise<{ deleted: number }> {

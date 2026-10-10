@@ -62,10 +62,17 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
-    /** Pass the ball: the lead is now in [holder]'s hands (a user id or "customer"); null = nobody's. */
+    /** Pass the ball: the lead is now in [holder]'s hands (a user id, "assistant" or "customer"); null = nobody's. */
     suspend fun setHolder(leadId: Int, holder: String?): Result<Unit> {
         val body = JsonObject(mapOf("holder" to (holder?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull))).toString().encodeToByteArray()
         val r = httpRequest("POST", "$base/api/leads/$leadId", token, body, "application/json; charset=utf-8")
+        return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
+    }
+
+    /** Busy mode: [busy] = the assistant answers customers on the business line. Stays as set. */
+    suspend fun setBusy(busy: Boolean): Result<Unit> {
+        val body = JsonObject(mapOf("busy" to JsonPrimitive(busy))).toString().encodeToByteArray()
+        val r = httpRequest("POST", "$base/api/assistant", token, body, "application/json; charset=utf-8")
         return if (r.code == 200) Result.Ok(Unit) else Result.Err(describe(r))
     }
 
@@ -130,8 +137,8 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
     }
 
     /**
-     * Send this lead's card as plain WhatsApp text to [to] ("preview" = קבוצה ריקה,
-     * "dudu"), leaving out what [hide] names.
+     * Send this lead's card as plain WhatsApp text to [to] ("preview" = קבוצה ריקה),
+     * leaving out what [hide] names.
      */
     suspend fun sendCardText(leadId: Int, hide: List<String>, to: String): Result<Unit> {
         val body = JsonObject(mapOf("to" to JsonPrimitive(to), "hide" to kotlinx.serialization.json.JsonArray(hide.map { JsonPrimitive(it) })))
@@ -148,7 +155,7 @@ class OurLeadsApi(baseUrl: String, private val token: String) {
             .getOrElse { Result.Err("תשובה לא תקינה מהשרת") }
     }
 
-    /** Send the report to [to] ("preview" or "dudu") — only [ids], or every open lead when null. */
+    /** Send the report to [to] ("preview") — only [ids], or every open lead when null. */
     suspend fun sendReport(to: String, ids: List<Int>? = null): Result<Unit> {
         val fields = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("to" to JsonPrimitive(to))
         ids?.let { fields["ids"] = kotlinx.serialization.json.JsonArray(it.map { id -> JsonPrimitive(id) }) }

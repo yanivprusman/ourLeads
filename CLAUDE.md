@@ -2,6 +2,14 @@
 
 # ourLeads
 
+> **Dudu left on 2026-10-10.** The business line's assistant took over his part (first talk with the
+> customer). What changed: he is no longer in `OURLEADS_USERS` (no login, not a ball place); the ball
+> can be with the assistant (`ASSISTANT` in `lib/config.ts`, holder `"assistant"`, like the customer —
+> not a user, no share); lead text goes only to the preview group; the two sources are shown under
+> Yaniv's brands, "ג.ח. עבודות גובה" (`basis`) and "ג.ח. יונים וחלונות" (`israel`) — ids unchanged,
+> leads carry them. Dudu's two chats are still read (nothing new is expected from them). The history
+> below describes how the board was built for the partnership.
+
 Shared lead board for the partnership with **Dudu (בסיס עבודות בגובה, 053-332-5272, basis-s.co.il)**
 and the business **סנפלינג ישראל (052-540-7778, s-israel.co.il)**. The split Dudu set on 2026-10-05:
 building and facade work goes to Basis; pigeons and windows go to סנפלינג ישראל.

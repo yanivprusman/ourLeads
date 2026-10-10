@@ -1,6 +1,6 @@
 import "server-only";
 import { askJson } from "./claude";
-import { CUSTOMER, CUSTOMER_DAYS, SOURCES, users } from "./config";
+import { ASSISTANT, CUSTOMER, CUSTOMER_DAYS, SOURCES, users } from "./config";
 import { STATUS_GUIDE, describeLeads } from "./ingest";
 import { STATUS_LABELS, addEvent, getDb, getLead, isStatus, logFieldEdits, now, setHolder, updateLead } from "./db";
 import { CALENDAR_KEYS, DEAL_KEYS, cleanDate, cleanDateTime, describeCalendar, describeDeal, todayLine } from "./deal";
@@ -159,9 +159,9 @@ status הוא אחד משלושה מצבים, ועוד יציאה: none (עוד 
 "זה לא חיזוק אריחים, זה איטום פסיפס" / "תשנה את העבודה לאיטום פסיפס" → trade "איטום פסיפס", ו-title חדש שבו סוג העבודה הוחלף והשאר נשמר (למשל "חיזוק אריחים בחזית – באר שבע" → "איטום פסיפס בחזית – באר שבע").
 "הכתובת היא הרצל 5" → address. "זה בדימונה, לא בבאר שבע" → city, ו-title מתוקן אם העיר מופיעה בו.
 details: רק כשנאמר תיאור חדש של העבודה שמחליף את הקיים.
-העברת ליד — אצל מי הליד עכשיו (מי צריך לטפל בו הלאה): holder הוא מזהה של אחד מהשותפים: ${people}.
+העברת ליד — אצל מי הליד עכשיו (מי צריך לטפל בו הלאה): holder הוא ${people}, או "${ASSISTANT.id}" = ${ASSISTANT.name} (העוזר של הקו העסקי, שמדבר עם הלקוח).
 מי שמדבר עכשיו: ${who.id} (${who.name}).
-"תעביר לדודו" / "תעביר את הליד לדודו" / "זה אצל דודו עכשיו" → holder "dudu". "תעביר אליי" / "זה אצלי" / "אני לוקח את זה" → holder "${who.id}".
+"תעביר לעוזר" / "שהעוזר יטפל בזה" / "זה אצל העוזר עכשיו" → holder "${ASSISTANT.id}". "תעביר אליי" / "זה אצלי" / "אני לוקח את זה" → holder "${who.id}".
 הכדור אצל הלקוח — כשמחכים לו (שיחשוב על המחיר, ישלח תמונות, יאשר תאריך) → holder "customer", ואז אחרי כמה ימים שנינו בודקים איתו.
 checkBackAt: היום שבו בודקים איתו, "YYYY-MM-DD". "הכדור אצל הלקוח" / "מחכים לו" בלי זמן → checkBackAt null (ברירת המחדל ${CUSTOMER_DAYS} ימים). "תבדוק איתו ביום ראשון" / "נחזור אליו בעוד שבוע" → התאריך הזה.
 "זה לא אצל אף אחד" / "תוריד את הכדור" / "אף אחד לא מטפל בזה" → holder "nobody".
@@ -230,11 +230,11 @@ export async function runCommand(said: string, user: { id: string; name: string 
       patch.work_end = cleanDate(c.workEnd) ?? ws;
     }
     const status = isStatus(c.status) ? c.status : null;
-    const ballTo = [...people, CUSTOMER];
+    const ballTo = [...people, ASSISTANT, CUSTOMER];
     const checkBack = cleanDate(c.checkBackAt);
     const holder = c.holder === "nobody" ? null : c.holder ? ballTo.find((u) => u.id === c.holder) : checkBack ? CUSTOMER : undefined;
     if (holder !== undefined) setHolder(c.leadId, who, holder, ballTo.find((u) => u.id === before.holder)?.name ?? null, holder?.id === CUSTOMER.id ? checkBack : null);
-    // A bare "pass it to Dudu" is fully told by the handover line; don't also log the sentence as a note.
+    // A bare "pass it to the assistant" is fully told by the handover line; don't also log the sentence as a note.
     const onlyHandover = holder !== undefined && !status && !c.note && Object.keys(patch).length === 0;
     const after = onlyHandover ? getLead(c.leadId)! : updateLead(c.leadId, who, patch, status, c.note ?? text);
     if (DEAL_KEYS.some((k) => k in patch)) addEvent(c.leadId, who, "deal", describeDeal(after));
