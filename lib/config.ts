@@ -92,18 +92,17 @@ export function users(): User[] {
  * work at height, and pigeons and windows (the same split as the business line's
  * alert groups, lib/cloud.ts LINES). Shown as the board's source filter.
  *
- * Each one is also a WhatsApp chat leads used to arrive from — Dudu's two businesses,
- * בסיס and סנפלינג ישראל — so `partner` and `actor` still describe who is on the other
- * end there, for the extractor and the timeline. Dudu left on 2026-10-10 and the
- * business line's assistant took over his part; the ids stay because leads carry them.
+ * Leads in them came from Dudu's two WhatsApp chats (his businesses בסיס and
+ * סנפלינג ישראל) until he left on 2026-10-10; those chats are no longer read. `jid`
+ * stays so his chat is never taken for a customer's (lib/customerChats.ts), and
+ * `actor` names him on the old messages in a lead's history. The ids stay because
+ * leads carry them.
  */
 export interface Source {
   id: string;
   jid: string;
   label: string;
-  /** Who is on the other end of the chat, as the extractor should call them. */
-  partner: string;
-  /** The name an event from this chat is signed with on a lead's timeline. */
+  /** Who wrote the old messages from this chat, as a lead's history names them. */
   actor: string;
   trades: string;
 }
@@ -113,7 +112,6 @@ export const SOURCES: Source[] = [
     id: "basis",
     jid: "972533325272@s.whatsapp.net",
     label: "ג.ח. עבודות גובה",
-    partner: "דודו (בסיס עבודות בגובה)",
     actor: "דודו",
     trades: "שיפוץ מעטפת: שיקום בטון, איטום קירות חיצוניים, חיזוק אריחים, צביעה, מרזבים, אינסטלציה חיצונית, תליית שלטים, פירוק אנטנות וכל עבודה בגובה סביב הבניין",
   },
@@ -121,7 +119,6 @@ export const SOURCES: Source[] = [
     id: "israel",
     jid: "972525407778@s.whatsapp.net",
     label: "ג.ח. יונים וחלונות",
-    partner: "העסק סנפלינג ישראל (שם של חברה, לא של אדם)",
     actor: "סנפלינג ישראל",
     trades: "הרחקת יונים וניקוי חלונות",
   },
@@ -133,10 +130,6 @@ export const SOURCES: Source[] = [
  * and both servers read the one shared board, so the token is valid on either.
  */
 export const CARD_ORIGIN = "https://our-leads.prod.ya-niv.com";
-
-export function sourceByJid(jid: string): Source | undefined {
-  return SOURCES.find((s) => s.jid === jid);
-}
 
 /** Only messages at or after this instant are ever read in. */
 export function ingestSince(): string {

@@ -47,19 +47,6 @@ export interface BridgeMessage {
   filename: string;
 }
 
-/** Messages in these chats at or after `since` (ISO), oldest first. */
-export async function messagesSince(jids: string[], since: string): Promise<BridgeMessage[]> {
-  const ph = jids.map(() => "?").join(",");
-  const rows = await dbquery(
-    `SELECT id, chat_jid, sender, COALESCE(content,''), timestamp, is_from_me, COALESCE(media_type,''), COALESCE(filename,'')
-     FROM messages
-     WHERE chat_jid IN (${ph}) AND julianday(timestamp) >= julianday(?) AND deleted_at IS NULL
-     ORDER BY julianday(timestamp) ASC LIMIT 500`,
-    [...jids, since],
-  );
-  return rows.map(toMessage);
-}
-
 /** Messages in each chat at or after that chat's own `since` (ISO), oldest first. */
 export async function messagesInChats(chats: { jid: string; since: string }[]): Promise<BridgeMessage[]> {
   if (!chats.length) return [];

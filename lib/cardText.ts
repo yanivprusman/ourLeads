@@ -324,31 +324,3 @@ export async function clearPreview(who: string): Promise<{ deleted: number; fail
   return { deleted, failed };
 }
 
-/**
- * Called by the ingest for each newly read partner-chat message. Text the app
- * made (it carries a mark) is filed, never extracted:
- * - sent by the app straight into this chat → already logged, just closed;
- * - forwarded here from elsewhere (the preview group) → logged now, on each lead in it;
- * - edited on the way, so no record matches → a card still names its lead; a report is just closed.
- * Returns true when the message was ours.
- */
-export function claimSentText(m: { id: string; chat_jid: string; content: string; from_me: boolean; sent_at: string }, partner: string): boolean {
-  const match = m.content.match(MARK_IN_TEXT);
-  if (!match) return false;
-  const d = getDb();
-  const sent = d.prepare("SELECT * FROM sent_texts WHERE hash = ? ORDER BY id DESC").all(hash(m.content)) as unknown as {
-    chat_jid: string;
-    kind: string;
-    lead_ids: string;
-  }[];
-  const exists = (id: number) => !!d.prepare("SELECT 1 FROM leads WHERE id = ?").get(id);
-  const isReport = !match[1];
-  const leadIds = (sent.length ? (JSON.parse(sent[0].lead_ids) as number[]) : isReport ? [] : [Number(match[1])]).filter(exists);
-
-  d.prepare("UPDATE messages SET lead_id = ?, state = 'done' WHERE id = ? AND chat_jid = ?").run(isReport ? null : (leadIds[0] ?? null), m.id, m.chat_jid);
-  if (sent.some((s) => s.chat_jid === m.chat_jid)) return true;
-  const what = isReport ? "דוח הלידים" : "הכרטיס";
-  const text = m.from_me ? `${what} הועבר ל${partner} בוואטסאפ` : `${partner} שלח את ${what} בוואטסאפ`;
-  for (const id of leadIds) addEvent(id, m.from_me ? "יניב" : partner, "share", text, null, null, m.sent_at);
-  return true;
-}

@@ -102,34 +102,7 @@ function getShare(token: string): ShareRow | undefined {
   return getDb().prepare("SELECT * FROM shares WHERE token = ?").get(token) as unknown as ShareRow | undefined;
 }
 
-const TOKEN_IN_TEXT = /our-leads\.(?:prod|dev)\.ya-niv\.com\/c\/([A-Za-z0-9_-]{16})/g;
 const HAS_TOKEN = /our-leads\.(?:prod|dev)\.ya-niv\.com\/c\/[A-Za-z0-9_-]{16}/;
-
-/**
- * Called by the ingest for each newly read message. A message carrying a card
- * link is that card being sent: it is filed on the lead, logged, and closed — it
- * never reaches the extractor. Returns the lead id, or null for an ordinary message.
- */
-export function claimCardLink(m: { id: string; chat_jid: string; content: string; from_me: boolean; sent_at: string }, actor: string): number | null {
-  for (const match of m.content.matchAll(TOKEN_IN_TEXT)) {
-    const share = getShare(match[1]);
-    if (!share) continue;
-    const d = getDb();
-    d.prepare("UPDATE messages SET lead_id = ?, state = 'done' WHERE id = ? AND chat_jid = ?").run(share.lead_id, m.id, m.chat_jid);
-    const to = SOURCES.find((s) => s.jid === m.chat_jid)?.actor ?? "השותף";
-    addEvent(
-      share.lead_id,
-      m.from_me ? "יניב" : actor,
-      "share",
-      m.from_me ? `הכרטיס נשלח ל${to} בוואטסאפ` : `${to} שלח את הכרטיס בוואטסאפ`,
-      null,
-      null,
-      m.sent_at,
-    );
-    return share.lead_id;
-  }
-  return null;
-}
 
 /** Free text says what the hidden fields hold in its own words; take out what can be recognised. */
 const PHONE = /(?:\+?972[-\s]?|0)(?:[-\s]?\d){8,9}/g;

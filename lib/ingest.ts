@@ -1,25 +1,17 @@
 import "server-only";
 import path from "node:path";
-import { messagesSince, downloadMedia } from "./bridge";
-import { ASSISTANT, CUSTOMER, SOURCES, Source, dataDir, ingestSince, users } from "./config";
-import { askJson } from "./claude";
-import { cleanDate, cleanDateTime, describeCalendar, describeDeal, sayWhen, todayLine } from "./deal";
+import { downloadMedia } from "./bridge";
+import { ASSISTANT, CUSTOMER, dataDir, users } from "./config";
+import { cleanDate, cleanDateTime, describeDeal, sayWhen } from "./deal";
 import { transcribe } from "./transcribe";
-import { claimCardLink } from "./shares";
-import { claimSentText } from "./cardText";
 import { classifyPhotos } from "./photoPhones";
 import { processCustomerChats, pullCustomerChats } from "./customerChats";
 import { processBusinessChats } from "./assistant";
 import {
   STATUSES,
   STATUS_LABELS,
-  addEvent,
   getDb,
-  getLead,
-  isStatus,
-  now,
   openLeads,
-  updateLead,
   type LeadPatch,
   type MessageRow,
 } from "./db";
@@ -27,11 +19,14 @@ import {
 /**
  * WhatsApp → leads.
  *
- * Every POLL_MS the source chats are read from the bridge and new messages are
- * stored as `pending`. A chat's pending messages are turned into leads only
- * once the chat has been QUIET for QUIET_MS: Dudu sends a lead as a burst —
- * a voice note, five photos, a video, an address, a phone number, a minute
- * apart — and reading it half-way would make two half-leads out of one.
+ * Every POLL_MS: customers' own chats (lib/customerChats.ts) and the business
+ * line (lib/assistant.ts). Dudu's two chats were read here too — a burst of
+ * voice notes and screenshots turned into leads by an extractor — until he left;
+ * the reader was removed on 2026-10-10 (git history has it).
+ *
+ * The helpers below are shared by those readers: a chat's pending messages are
+ * read only once it has been QUIET for QUIET_MS (people write in bursts — a photo,
+ * then the address — and reading half-way makes two half-leads out of one).
  */
 const POLL_MS = 20_000;
 const QUIET_MS = 120_000;
@@ -44,13 +39,12 @@ export const OVERLAP_MS = 30 * 60_000;
 export const OWNER = "יניב";
 
 let running = false;
-const backoffUntil = new Map<string, number>();
 const log = (...a: unknown[]) => console.log("[ourleads/ingest]", ...a);
 
 export function startIngest(): void {
   const g = globalThis as unknown as { __ourleadsIngest?: NodeJS.Timeout };
   if (g.__ourleadsIngest) return;
-  log("started: polling", SOURCES.map((s) => s.label).join(", "));
+  log("started: polling customers' chats and the business line");
   g.__ourleadsIngest = setInterval(() => void tick(), POLL_MS);
   void tick();
 }
@@ -59,9 +53,7 @@ export async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    await pull();
     await pullCustomerChats(log);
-    for (const s of SOURCES) await processSource(s);
     await processCustomerChats(log);
     await processBusinessChats(log);
     await classifyPhotos(log);
@@ -70,46 +62,6 @@ export async function tick(): Promise<void> {
   } finally {
     running = false;
   }
-}
-
-async function pull(): Promise<void> {
-  const d = getDb();
-  // Partner chats only: a customer's chat (lib/customerChats.ts) keeps its own place.
-  const ph = SOURCES.map(() => "?").join(",");
-  const latest = (
-    d.prepare(`SELECT MAX(sent_at) AS m FROM messages WHERE chat_jid IN (${ph})`).get(...SOURCES.map((s) => s.jid)) as { m: string | null }
-  ).m;
-  const floor = ingestSince();
-  let since = floor;
-  if (latest) {
-    const back = new Date(new Date(latest).getTime() - OVERLAP_MS).toISOString();
-    if (new Date(back) > new Date(floor)) since = back;
-  }
-  const msgs = await messagesSince(
-    SOURCES.map((s) => s.jid),
-    since,
-  );
-  const ins = d.prepare(
-    `INSERT OR IGNORE INTO messages (id, chat_jid, source, from_me, sent_at, content, media_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  );
-  let added = 0;
-  for (const m of msgs) {
-    const src = SOURCES.find((s) => s.jid === m.chatJid);
-    if (!src) continue;
-    const sentAt = new Date(m.timestamp).toISOString();
-    const r = ins.run(m.id, m.chatJid, src.id, m.fromMe ? 1 : 0, sentAt, m.content, m.mediaType);
-    if (!r.changes) continue;
-    added++;
-    // A lead card sent into the chat is filed on its lead here, before the extractor
-    // could read the customer's details in it as a new lead.
-    // Same for lead text the app made (lib/cardText.ts) — a card or the report, sent here or forwarded.
-    const msg = { id: m.id, chat_jid: m.chatJid, content: m.content, from_me: m.fromMe, sent_at: sentAt };
-    const leadId = claimCardLink(msg, src.actor);
-    if (leadId) log(`card for lead #${leadId} sent in ${src.id}`);
-    else if (claimSentText(msg, src.actor)) log(`lead text sent in ${src.id}`);
-  }
-  if (added) log(`read ${added} new message(s)`);
 }
 
 /**
@@ -123,26 +75,6 @@ export function readyBatch(pending: MessageRow[]): MessageRow[] | null {
   if (age(pending[pending.length - 1]) >= QUIET_MS) return pending;
   if (age(pending[0]) < MAX_WAIT_MS) return null;
   return pending.filter((m) => age(m) >= QUIET_MS);
-}
-
-async function processSource(src: Source): Promise<void> {
-  if ((backoffUntil.get(src.id) ?? 0) > Date.now()) return;
-  const d = getDb();
-  const pending = d
-    .prepare("SELECT * FROM messages WHERE source = ? AND state = 'pending' ORDER BY sent_at ASC")
-    .all(src.id) as unknown as MessageRow[];
-  if (!pending.length) return;
-  const ready = readyBatch(pending);
-  if (!ready) return;
-  // Only Yaniv talking and nothing from the partner: still worth reading — "I'll
-  // be there Thursday" is a status — so the batch goes through either way.
-  try {
-    await prepareMedia(ready);
-    await extract(src, ready);
-  } catch (e) {
-    backoffUntil.set(src.id, Date.now() + RETRY_MS);
-    log(`${src.id}: batch of ${ready.length} failed, retrying in 5 min:`, (e as Error).message);
-  }
 }
 
 /** Download every pending message's media; transcribe voice notes. A failure
@@ -240,12 +172,6 @@ export interface LeadFields {
   workEnd?: string | null;
 }
 
-interface ExtractAnswer {
-  create?: (LeadFields & { messageIds: string[]; status?: string; note?: string })[];
-  attach?: (LeadFields & { leadId: number; messageIds: string[]; status?: string; note?: string })[];
-  ignore?: string[];
-}
-
 export function toPatch(f: LeadFields): LeadPatch {
   const p: LeadPatch = {};
   if (f.title) p.title = f.title;
@@ -271,202 +197,4 @@ export function toPatch(f: LeadFields): LeadPatch {
     p.work_end = cleanDate(f.workEnd) ?? ws;
   }
   return p;
-}
-
-function buildPrompt(src: Source, msgs: MessageRow[]): string {
-  return `אתה מנהל לוח לידים לשותפות עבודות גובה (סנפלינג). ${OWNER} הוא הקבלן שמבצע את העבודות.
-השותף ${src.partner} מעביר לו לידים בוואטסאפ. התחומים של השותף הזה: ${src.trades}.
-
-לפניך הודעות חדשות מהצ'אט בין ${OWNER} ל${src.partner}, והלידים שעדיין פתוחים.
-המשימה: לשייך כל הודעה לליד — חדש או קיים — ולחלץ את פרטי הליד.
-
-איך ליד נראה בצ'אט: השותף שולח רצף של כמה הודעות על אותו לקוח — הקלטה קולית, תמונות, סרטון,
-כתובת, שם ומספר טלפון של הלקוח. הודעות סמוכות שמדברות על אותו לקוח/מקום הן ליד אחד.
-תמונות וסרטונים בלי כיתוב שייכים לליד שההודעות שסביבם מדברות עליו.
-תמונות: חובה לפתוח כל תמונה עם הכלי Read לפני שאתה עונה. רוב התמונות הן צילומי מסך של שיחת
-וואטסאפ בין השותף ללקוח — יש בהן שם, מספר טלפון (בראש המסך), כתובת, מה הלקוח צריך ומה סוכם.
-זה המקור העיקרי לפרטי הליד. תמונה אחרת היא צילום של המקום (גג, חזית) — שייך אותה לליד שלה.
-מספר טלפון שנשלח לבד הוא טלפון של לקוח — אבל לא בהכרח של הליד הקודם: בדוק בהקלטות ובצילומי
-המסך שסביבו למי הוא שייך. הקלטה של השותף שאומרת "תחזור למספר הזה, קוראים לה..." פותחת ליד חדש.
-הודעה שמעדכנת ליד קיים (״אגיע אליו בחמישי״, ״הלקוח לא רלוונטי״, ״תעצור איתו עד שאעדכן״)
-— שייך אותה לליד הקיים ועדכן סטטוס/צעד הבא.
-עבודה שהשותף מעביר ל${OWNER} לבצע (״מחר באשדוד, אליאס יפתח לך את הגג, תתחיל עיגונים״) היא ליד,
-גם בלי טלפון של לקוח — כולל הוראות גישה, שעות ושם איש קשר באתר.
-ignore רק להודעות שאין בהן שום מידע על עבודה, לקוח או מקום: שלום, חג שמח, ״אוקי״, תיאום על חלוקת העבודה בין
-השותפים. בספק — זה לא ignore. הודעה שהולכת ל-ignore לא תגיע לאף אחד.
-הודעה על השותפים עצמם ולא על לקוח — עיכוב, פקק, כביש/שטח סגור, ״אני בדרך״, ״אאחר״, מי נוסע לאן —
-לעולם לא פותחת ליד חדש. אם ברור לאיזה ליד פתוח היא שייכת (אותו מקום, העבודה שקבועה לאותו יום) —
-attach עם note. אחרת — ignore.
-שיוך לליד קיים (attach) רק כשההודעות מזהות אותו במפורש: אותו טלפון, אותו שם, אותה כתובת/עיר,
-או התייחסות ישירה (״לגבי הליד של...״). דמיון בסוג העבודה (״גג זכוכית״, ״מגדל״) הוא לא זיהוי.
-אם אתה רק מנחש לאיזה ליד זה שייך — אל תצרף ואל תזרוק: פתח ליד חדש עם כל המידע, וכתוב ב-details
-וב-note לאיזה ליד זה אולי קשור ולמה (״ייתכן שזה ליד #12 — אותה עיר, אין טלפון״), כדי שאדם יאחד אם צריך.
-ליד ששויך בטעות מערבב שני לקוחות; ליד כפול מתקנים בהעברת ההודעות שלו; מידע שנזרק — אבד.
-ב-attach לעולם אל תחליף את ה-title לעבודה אחרת או למקום אחר; רק השלם מקום שהיה ״לא ידוע״.
-
-סטטוסים אפשריים: ${STATUS_GUIDE}.
-ליד חדש מתחיל ב-none. meeting = נקבעה פגישה/ביקור אצל הלקוח (גם בלי תאריך); work = סגרו עבודה (גם בלי תאריך).
-removed רק כשנאמר במפורש שהליד ירד או שהעבודה הסתיימה. כל השאר (דיברו, שלחו הצעה, ממתינים) — note, לא status.
-
-שדות ליד:
-- title: כותרת קצרה שתזהה את הליד ברשימה — עבודה + מקום, למשל "ניקוי גג – רעננה" או "איטום גג רעפים – באר שבע".
-- trade: סוג העבודה במילים ספורות.
-- customerName: שם הלקוח אם נאמר (לא שם השותף).
-- phones: טלפונים של הלקוח בפורמט 05XXXXXXXX (בלי +972, בלי מקפים).
-- address, city: כתובת ועיר אם נאמרו.
-- details: סיכום של כל מה שידוע על העבודה — מה צריך, מצב, מחיר שדובר, דחיפות — כולל מה שנאמר בהקלטות. 1–4 משפטים.
-- nextStep: מה הצעד הבא ומי עושה אותו, אם ברור.
-- יומן (${todayLine()}): meetingAt = פגישה/ביקור שנקבע אצל לקוח שעוד אין איתו חוזה, "YYYY-MM-DDTHH:MM";
-  workStart/workEnd = ימי ביצוע אחרי שנסגר חוזה, "YYYY-MM-DD". "אגיע אליו בחמישי" בלי שעה → meetingAt עם 09:00
-  וכתוב ב-note שהשעה לא נקבעה. אל תשתמש ב-visitAt.
-- עסקה, רק אם נאמר סכום שסוכם: clientPrice/clientVat = מה הלקוח משלם; subName/subPhone/subPrice/subVat =
-  קבלן המשנה שמבצע את העבודה ומה הוא מקבל. clientVat/subVat: true אם "פלוס מע"מ", false אם "כולל מע"מ".
-  הצעת מחיר שעוד לא נסגרה היא לא עסקה — כתוב אותה ב-details.
-
-לליד קיים (attach) — שלח רק שדות שמשתנים או מתווספים. ב-details של ליד קיים שלח את הסיכום המלא המעודכן.
-note: משפט קצר שמסביר מה השתנה (יוצג בהיסטוריה של הליד).
-
-לידים פתוחים:
-${describeLeads()}
-
-הודעות חדשות (המזהה בסוגריים משולשים):
-${msgs.map((m) => describeMessage(m, src.actor)).join("\n")}
-
-התשובה במבנה הבא:
-{"create":[{"messageIds":["..."],"title":"...","trade":"...","customerName":null,"phones":[],"address":null,"city":null,"details":"...","nextStep":null,"visitAt":null,"status":"none","note":null}],
- "attach":[{"leadId":1,"messageIds":["..."],"status":null,"note":"...", "details":"..."}],
- "ignore":["..."]}
-כל מזהה הודעה מופיע בדיוק פעם אחת באחת הרשימות.`;
-}
-
-const str = { type: ["string", "null"] };
-const LEAD_FIELDS = {
-  title: { type: "string" },
-  trade: str,
-  customerName: str,
-  phones: { type: "array", items: { type: "string" } },
-  address: str,
-  city: str,
-  details: str,
-  nextStep: str,
-  visitAt: str,
-  clientPrice: { type: ["number", "null"] },
-  clientVat: { type: ["boolean", "null"] },
-  subName: str,
-  subPhone: str,
-  subPrice: { type: ["number", "null"] },
-  subVat: { type: ["boolean", "null"] },
-  meetingAt: str,
-  workStart: str,
-  workEnd: str,
-  status: str,
-  note: str,
-  messageIds: { type: "array", items: { type: "string" } },
-};
-const EXTRACT_SCHEMA = {
-  type: "object",
-  properties: {
-    create: { type: "array", items: { type: "object", properties: LEAD_FIELDS, required: ["title", "messageIds"] } },
-    attach: {
-      type: "array",
-      items: { type: "object", properties: { leadId: { type: "integer" }, ...LEAD_FIELDS }, required: ["leadId", "messageIds"] },
-    },
-    ignore: { type: "array", items: { type: "string" } },
-  },
-  required: ["create", "attach", "ignore"],
-};
-
-async function extract(src: Source, msgs: MessageRow[]): Promise<void> {
-  const answer = await askJson<ExtractAnswer>(buildPrompt(src, msgs), EXTRACT_SCHEMA, path.join(dataDir(), "media"));
-  const d = getDb();
-  const byId = new Map(msgs.map((m) => [m.id, m]));
-  const setMsg = d.prepare("UPDATE messages SET lead_id = ?, state = ? WHERE id = ? AND chat_jid = ?");
-  const touched = new Set<string>();
-  const lastAt = (ids: string[]) =>
-    ids.map((i) => byId.get(i)?.sent_at).filter(Boolean).sort().pop() ?? now();
-
-  d.exec("BEGIN");
-  try {
-    for (const c of answer.create ?? []) {
-      const ids = (c.messageIds ?? []).filter((i) => byId.has(i) && !touched.has(i));
-      if (!ids.length || !c.title) continue;
-      const t = now();
-      const status = isStatus(c.status) ? c.status : "none";
-      const r = d
-        .prepare(
-          `INSERT INTO leads (source, title, trade, customer_name, phones, address, city, details, status, next_step, visit_at, created_at, updated_at, last_message_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          src.id,
-          c.title,
-          c.trade ?? null,
-          c.customerName ?? null,
-          JSON.stringify(c.phones ?? []),
-          c.address ?? null,
-          c.city ?? null,
-          c.details ?? null,
-          status,
-          c.nextStep ?? null,
-          c.visitAt ?? null,
-          t,
-          t,
-          lastAt(ids),
-        );
-      const leadId = Number(r.lastInsertRowid);
-      // Dated by the partner's first message, not by when the server got round to reading it.
-      const firstAt = ids.map((i) => byId.get(i)!.sent_at).sort()[0];
-      addEvent(leadId, src.actor, "created", c.note ?? `ליד חדש מ${src.label}`, null, status, firstAt);
-      const deal = toPatch({ clientPrice: c.clientPrice, clientVat: c.clientVat, subName: c.subName, subPhone: c.subPhone, subPrice: c.subPrice, subVat: c.subVat });
-      if (Object.keys(deal).length) {
-        const lead = updateLead(leadId, src.actor, deal, null, null);
-        addEvent(leadId, src.actor, "deal", describeDeal(lead), null, null, firstAt);
-      }
-      const cal = toPatch({ meetingAt: c.meetingAt, workStart: c.workStart, workEnd: c.workEnd });
-      if (Object.keys(cal).length) {
-        const lead = updateLead(leadId, src.actor, cal, null, null);
-        addEvent(leadId, src.actor, "calendar", describeCalendar(lead), null, null, firstAt);
-      }
-      for (const i of ids) {
-        setMsg.run(leadId, "done", i, byId.get(i)!.chat_jid);
-        touched.add(i);
-      }
-    }
-    for (const a of answer.attach ?? []) {
-      const ids = (a.messageIds ?? []).filter((i) => byId.has(i) && !touched.has(i));
-      if (!ids.length || !getLead(a.leadId)) continue;
-      const fromMe = ids.every((i) => byId.get(i)!.from_me);
-      updateLead(
-        a.leadId,
-        fromMe ? OWNER : src.actor,
-        toPatch(a),
-        isStatus(a.status) ? a.status : null,
-        a.note ?? "הודעות חדשות בוואטסאפ",
-      );
-      if (cleanDateTime(a.meetingAt) || cleanDate(a.workStart)) {
-        addEvent(a.leadId, fromMe ? OWNER : src.actor, "calendar", describeCalendar(getLead(a.leadId)!));
-      }
-      if (a.clientPrice != null || a.subPrice != null || a.subName) {
-        const lead = getLead(a.leadId)!;
-        addEvent(a.leadId, fromMe ? OWNER : src.actor, "deal", describeDeal(lead));
-      }
-      d.prepare("UPDATE leads SET last_message_at = ? WHERE id = ?").run(lastAt(ids), a.leadId);
-      for (const i of ids) {
-        setMsg.run(a.leadId, "done", i, byId.get(i)!.chat_jid);
-        touched.add(i);
-      }
-    }
-    // Anything the answer did not place — named in ignore or forgotten — is
-    // closed as ignored, so it is not re-read forever. It stays visible on the
-    // board's "unassigned" list, where a person can move it to a lead.
-    for (const m of msgs) if (!touched.has(m.id)) setMsg.run(null, "ignored", m.id, m.chat_jid);
-    d.exec("COMMIT");
-  } catch (e) {
-    d.exec("ROLLBACK");
-    throw e;
-  }
-  log(
-    `${src.id}: ${msgs.length} message(s) → ${answer.create?.length ?? 0} new lead(s), ` +
-      `${answer.attach?.length ?? 0} update(s), ${msgs.length - touched.size} unassigned`,
-  );
 }
